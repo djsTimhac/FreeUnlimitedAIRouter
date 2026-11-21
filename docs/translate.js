@@ -20,8 +20,9 @@
   var CACHE_VERSION = 2; // bump when the applied text changes shape
   var SKIP = 'script,style,noscript,code,pre,textarea,select,option,[data-no-translate]';
 
-  // Native names, so the picker reads the same to everybody.
-  var LANGS = [
+  // Autonyms for the languages people pick most; the full set of what Google
+  // supports is fetched at runtime, so this is a head start, not the limit.
+  var NATIVE = [
     ['en', 'English'], ['de', 'Deutsch'], ['fr', 'Français'], ['es', 'Español'],
     ['it', 'Italiano'], ['pt', 'Português'], ['nl', 'Nederlands'], ['pl', 'Polski'],
     ['ru', 'Русский'], ['uk', 'Українська'], ['cs', 'Čeština'], ['sk', 'Slovenčina'],
@@ -32,7 +33,7 @@
     ['ca', 'Català'], ['gl', 'Galego'], ['eu', 'Euskara'], ['cy', 'Cymraeg'],
     ['ga', 'Gaeilge'], ['is', 'Íslenska'], ['sq', 'Shqip'], ['mk', 'Македонски'],
     ['bs', 'Bosanski'], ['mt', 'Malti'], ['af', 'Afrikaans'], ['sw', 'Kiswahili'],
-    ['am', 'አማርኛ'], ['ar', 'العربية'], ['he', 'עברית'], ['fa', 'فارسی'],
+    ['am', 'አማርኛ'], ['ar', 'العربية'], ['iw', 'עברית'], ['fa', 'فارسی'],
     ['ur', 'اردو'], ['hi', 'हिन्दी'], ['bn', 'বাংলা'], ['pa', 'ਪੰਜਾਬੀ'],
     ['gu', 'ગુજરાતી'], ['mr', 'मराठी'], ['ta', 'தமிழ்'], ['te', 'తెలుగు'],
     ['kn', 'ಕನ್ನಡ'], ['ml', 'മലയാളം'], ['si', 'සිංහල'], ['ne', 'नेपाली'],
@@ -42,15 +43,51 @@
     ['az', 'Azərbaycan'], ['hy', 'Հայերեն'], ['ka', 'ქართული'], ['eo', 'Esperanto']
   ];
 
-  var byCode = {};
-  LANGS.forEach(function (pair) { byCode[pair[0].toLowerCase()] = pair[0]; });
+  // Google still lists some languages under their old codes.
+  var ALIASES = { he: 'iw', fil: 'tl', nb: 'no', jv: 'jw', mo: 'ro' };
 
-  /* "de-AT", "pt-BR", "zh-Hant" ... -> a code the picker knows. */
+  var nativeByCode = {};
+  NATIVE.forEach(function (pair) { nativeByCode[pair[0].toLowerCase()] = pair[1]; });
+
+  var byCode = {};
+  function index(list) {
+    byCode = {};
+    list.forEach(function (pair) { byCode[pair[0].toLowerCase()] = pair[0]; });
+  }
+  index(NATIVE);
+
+  /* Every language the translate endpoint accepts, autonyms where we have
+     them. Resolves to null if the list cannot be fetched. */
+  function loadLanguages() {
+    return fetch('https://translate.googleapis.com/translate_a/l?client=gtx&alpha=true&hl=en')
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        var remote = data && data.tl;
+        if (!remote) return null;
+        var seen = {};
+        var list = Object.keys(remote).map(function (code) {
+          seen[code.toLowerCase()] = true;
+          return [code, nativeByCode[code.toLowerCase()] || remote[code]];
+        });
+        NATIVE.forEach(function (pair) {
+          if (!seen[pair[0].toLowerCase()]) list.push(pair);
+        });
+        list.sort(function (a, b) {
+          if (a[0] === SOURCE) return -1;
+          if (b[0] === SOURCE) return 1;
+          return a[1].localeCompare(b[1], 'en');
+        });
+        return list;
+      });
+  }
+
+  /* "de-AT", "pt-BR", "zh-Hant", "he" ... -> a code the picker knows. */
   function canonical(tag) {
     var value = String(tag || '').toLowerCase().trim();
     if (!value) return '';
     if (value.indexOf('zh') === 0) return byCode[/hant|tw|hk|mo/.test(value) ? 'zh-tw' : 'zh-cn'] || '';
-    return byCode[value] || byCode[value.split('-')[0]] || '';
+    var base = value.split('-')[0];
+    return byCode[value] || byCode[base] || byCode[ALIASES[base]] || byCode[ALIASES[value]] || '';
   }
 
   /* Text worth translating: no code samples, no widget chrome, no whitespace. */
@@ -210,29 +247,41 @@
 
   if (!select) return;
 
-  LANGS.forEach(function (pair) {
-    var option = document.createElement('option');
-    option.value = pair[0];
-    option.textContent = pair[1];
-    select.appendChild(option);
-  });
-
   select.addEventListener('change', function () {
     var code = canonical(select.value) || SOURCE;
     try { localStorage.setItem(STORE, code); } catch (e) { /* ignore */ }
     translate(code);
   });
 
-  var param = canonical(new URLSearchParams(location.search).get('lang'));
-  var stored = '';
-  try { stored = canonical(localStorage.getItem(STORE)); } catch (e) { /* ignore */ }
+  var requested = new URLSearchParams(location.search).get('lang');
+  var storedRaw = '';
+  try { storedRaw = localStorage.getItem(STORE) || ''; } catch (e) { /* ignore */ }
 
-  var start = param || stored || canonical((navigator.languages && navigator.languages[0]) || navigator.language) || SOURCE;
+  function boot(list) {
+    index(list);
+    select.innerHTML = '';
+    list.forEach(function (pair) {
+      var option = document.createElement('option');
+      option.value = pair[0];
+      option.textContent = pair[1];
+      select.appendChild(option);
+    });
 
-  if (param) {
-    try { localStorage.setItem(STORE, param); } catch (e) { /* ignore */ }
+    var fromUrl = canonical(requested);
+    var start = fromUrl || canonical(storedRaw) ||
+      canonical((navigator.languages && navigator.languages[0]) || navigator.language) || SOURCE;
+
+    if (fromUrl) {
+      try { localStorage.setItem(STORE, fromUrl); } catch (e) { /* ignore */ }
+    }
+
+    select.value = start;
+    if (start !== SOURCE) translate(start);
   }
 
-  select.value = start;
-  if (start !== SOURCE) translate(start);
+  // Don't leave a translated page waiting on the language list forever.
+  var fallback = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 1400); });
+  Promise.race([loadLanguages().catch(function () { return null; }), fallback]).then(function (list) {
+    boot(list || NATIVE);
+  });
 })();
