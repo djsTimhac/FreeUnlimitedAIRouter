@@ -784,23 +784,6 @@
     .gh-btn { padding: 8px 11px; }
   }
 
-  /* Google Translate renders its own <select>; hide its chrome, keep its options. */
-  .goog-te-banner-frame, .goog-te-balloon-frame { display: none !important; }
-  body { top: 0 !important; }
-  font.goog-te-text { background: transparent !important; }
-  .goog-logo-link, .goog-te-gadget-icon { display: none !important; }
-  .lang #google_translate_element { display: flex; align-items: center; }
-  .lang .goog-te-gadget { font-size: 0 !important; color: transparent; white-space: nowrap; }
-  .lang .goog-te-gadget > span { display: none !important; }
-  .lang .goog-te-combo {
-    margin: 0 !important;
-    height: auto !important;
-    line-height: normal !important;
-    font-size: 12.5px !important;
-    vertical-align: middle;
-  }
-  .lang .goog-te-combo option { background: #0a0c11; color: var(--text); }
-
   /* ── reveal ──────────────────────────────────────────────────────────── */
   .reveal { opacity: 0; transform: translateY(18px); transition: opacity .8s var(--ease), transform .8s var(--ease); }
   .reveal.in { opacity: 1; transform: none; }
@@ -818,111 +801,26 @@
 
 <script data-lang-detect>
 /*
-  First visit: land in the visitor's browser language.
+  First visit: remember the visitor's browser language.
 
-  This runs in <head>, before anything is painted: it picks the language and
-  writes the googtrans cookie the widget reads. A cookie written on the same
-  load the widget boots in is ignored, so the very first visit is swapped once
-  (still before first paint) and every later visit renders translated directly.
-
-  A manual choice always wins: Google writes the cookie itself when somebody
-  uses the picker, and the DECIDED flag keeps the detector from ever running
-  twice for the same visitor.
+  This only records a preference (translate.js does the translating and knows
+  which languages exist). The picker writes the same key, so a manual choice
+  always beats the detected one, and nothing here touches the page or reloads.
 */
 (function () {
-  var DECIDED = 'fu-lang-decided';
-  var SUPPORTED = 'en de fr es it pt nl pl ru uk cs sk hu ro bg hr sr sl el tr sv no da fi et lv lt be ca gl eu cy ga is sq mk bs mt af sw am ar he fa ur hi bn pa gu mr ta te kn ml si ne th vi id ms tl zh-CN zh-TW ja ko mn kk uz az hy ka eo la mi ha yo ig zu xh so km lo my ps sd ky tg'.split(' ');
-
-  function normalize(tag) {
-    var t = String(tag || '').toLowerCase();
-    if (!t) return '';
-    if (t.indexOf('zh') === 0) return /hant|tw|hk|mo/.test(t) ? 'zh-tw' : 'zh-cn';
-    var base = t.split('-')[0];
-    if (base === 'nb' || base === 'nn') return 'no';
-    if (base === 'iw') return 'he';
-    if (base === 'in') return 'id';
-    if (base === 'fil') return 'tl';
-    return base;
-  }
-
-  function canonical(code) {
-    if (!code) return '';
-    for (var i = 0; i < SUPPORTED.length; i++) {
-      if (SUPPORTED[i].toLowerCase() === code.toLowerCase()) return SUPPORTED[i];
-    }
-    return '';
-  }
-
-  function writeCookie(code) {
-    var value = '/en/' + code;
-    var maxAge = 60 * 60 * 24 * 365;
-    document.cookie = 'googtrans=' + value + '; path=/; max-age=' + maxAge;
-    try {
-      document.cookie = 'googtrans=' + value + '; path=/; domain=' + location.hostname + '; max-age=' + maxAge;
-    } catch (e) { /* host-only cookie is enough */ }
-  }
-
-  function clearCookie() {
-    document.cookie = 'googtrans=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    try {
-      document.cookie = 'googtrans=; path=/; domain=' + location.hostname + '; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    } catch (e) { /* ignore */ }
-  }
-
-  function cookieLanguage() {
-    var match = document.cookie.match(/(?:^|; )googtrans=([^;]*)/);
-    if (!match) return '';
-    var parts = decodeURIComponent(match[1]).split('/').filter(Boolean);
-    return parts.length ? parts[parts.length - 1] : '';
-  }
-
-  /* Google's widget only applies a googtrans cookie that already existed when
-     it booted, so a freshly written one needs one reload. This runs during
-     parsing, before anything is painted, and the session flag plus the cookie
-     check keep it from ever firing twice. */
-  function reloadOnce() {
-    try {
-      if (document.cookie.indexOf('googtrans=/en/') === -1) return; // cookie blocked
-      if (sessionStorage.getItem('fu-lang-reload') === '1') return;
-      sessionStorage.setItem('fu-lang-reload', '1');
-      location.replace(location.pathname + location.search);
-    } catch (e) { /* ignore */ }
-  }
-
   try {
-    var explicit = new URLSearchParams(location.search).get('lang');
-    if (explicit) {
-      var requested = canonical(normalize(explicit));
-      if (requested) {
-        localStorage.setItem(DECIDED, '1');
-        if (requested.toLowerCase() === 'en') {
-          clearCookie();
-          return;
-        }
-        if (cookieLanguage().toLowerCase() !== requested.toLowerCase()) {
-          writeCookie(requested);
-          reloadOnce();
-        }
-        return;
-      }
-    }
-
-    // Returning visitor with a choice already made (ours, Google's, or none).
-    if (localStorage.getItem(DECIDED) === '1') return;
-    if (cookieLanguage()) { localStorage.setItem(DECIDED, '1'); return; }
-
-    var preferred = (navigator.languages && navigator.languages[0]) || navigator.language || 'en';
-    var target = canonical(normalize(preferred));
-    localStorage.setItem(DECIDED, '1');
-    if (target && target.toLowerCase() !== 'en') {
-      writeCookie(target);
-      reloadOnce();
-    }
+    if (localStorage.getItem('fu-lang')) return;
+    var tag = String((navigator.languages && navigator.languages[0]) || navigator.language || 'en').toLowerCase();
+    var code = tag.indexOf('zh') === 0
+      ? (/hant|tw|hk|mo/.test(tag) ? 'zh-TW' : 'zh-CN')
+      : tag.split('-')[0];
+    localStorage.setItem('fu-lang', code || 'en');
   } catch (e) {
-    /* storage or cookies can be blocked; the page simply stays in English */
+    /* storage blocked: translate.js falls back to the browser language */
   }
 })();
 </script>
+<script src="translate.js" defer></script>
 </head>
 <body>
 
@@ -962,7 +860,7 @@
 
     <div class="lang" title="Translate this page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.7 4 6 4 9s-1.4 6.3-4 9c-2.6-2.7-4-6-4-9s1.4-6.3 4-9Z"/></svg>
-      <div id="google_translate_element"></div>
+      <select id="lang" aria-label="Translate this page"></select>
     </div>
 
     <a class="gh-btn" href="https://github.com/djsTimhac/FreeUnlimitedAIRouter" target="_blank" rel="noopener">
@@ -1307,12 +1205,6 @@
 })();
 </script>
 
-<!-- Whole-page translation: the official Google Translate website translator. -->
-<script>
-  window.googleTranslateElementInit = function () {
-    new google.translate.TranslateElement({ pageLanguage: 'en', autoDisplay: false }, 'google_translate_element');
-  };
-</script>
-<script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async defer></script>
+
 </body>
 </html>
