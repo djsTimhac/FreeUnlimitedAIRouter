@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FreeUnlimitedAIRouter</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #11161f;
+    --panel-2: #151b26;
+    --border: #232c3b;
+    --text: #e6edf7;
+    --muted: #8b98ab;
+    --accent: #7c9cff;
+    --accent-2: #5eead4;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --good: #34d399;
+    --radius: 14px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(1100px 500px at 12% -10%, rgba(124,156,255,.16), transparent 60%),
+      radial-gradient(800px 400px at 95% 0%, rgba(94,234,212,.10), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre { font-family: var(--mono); }
+
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 26px 22px 70px; }
+
+  header.top {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 22px;
+  }
+  .mark {
+    width: 38px; height: 38px; border-radius: 11px; flex: 0 0 auto;
+    background: linear-gradient(145deg, #1b2436, #0d1117);
+    border: 1px solid var(--border);
+    display: grid; place-items: center;
+  }
+  .mark svg { width: 24px; height: 24px; }
+  .brand h1 { font-size: 17px; margin: 0; letter-spacing: -.2px; font-weight: 650; }
+  .brand p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .spacer { flex: 1; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12.5px; padding: 6px 12px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--good); box-shadow: 0 0 0 3px rgba(52,211,153,.15); }
+  .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(251,191,36,.15); }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 0 3px rgba(248,113,113,.15); }
+
+  button, select, input, textarea {
+    font: inherit; color: inherit; background: var(--panel-2);
+    border: 1px solid var(--border); border-radius: 9px; padding: 8px 12px;
+    outline: none;
+  }
+  button { cursor: pointer; transition: border-color .15s, background .15s; }
+  button:hover { border-color: #35425a; }
+  button.primary {
+    background: linear-gradient(180deg, #7c9cff, #5a7cf0); border-color: #6d8df5; color: #04070f; font-weight: 650;
+  }
+  button.primary:hover { filter: brightness(1.07); }
+  button:disabled { opacity: .5; cursor: progress; }
+  select:focus, input:focus, textarea:focus { border-color: var(--accent); }
+
+  .grid { display: grid; gap: 16px; }
+  .stats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 16px; }
+  .cols { grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 940px) { .cols { grid-template-columns: 1fr; } }
+
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,.022), transparent 40%), var(--panel);
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px;
+  }
+  .card h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--muted); margin: 0 0 14px; font-weight: 600;
+  }
+  .stat .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+  .stat .v { font-size: 25px; font-weight: 650; letter-spacing: -.5px; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .stat .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    text-align: left; font-weight: 550; color: var(--muted); font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 9px 0; white-space: nowrap;
+  }
+  td { padding: 9px 10px 9px 0; border-top: 1px solid rgba(35,44,59,.75); vertical-align: middle; }
+  tr:first-child td { border-top: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .name { font-weight: 600; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .tag {
+    font-size: 10.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border);
+    color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600;
+  }
+  .tag.free { color: var(--accent-2); border-color: rgba(94,234,212,.3); background: rgba(94,234,212,.07); }
+  .tag.paid { color: var(--warn); border-color: rgba(251,191,36,.25); background: rgba(251,191,36,.06); }
+  .keys { display: flex; gap: 3px; }
+  .keybar { width: 9px; height: 9px; border-radius: 3px; background: #2a3445; }
+  .keybar.ok { background: var(--good); }
+  .keybar.cool { background: var(--warn); }
+  .muted { color: var(--muted); }
+  .err { color: var(--bad); font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .aliases { display: flex; flex-wrap: wrap; gap: 7px; }
+  .alias {
+    display: inline-flex; gap: 7px; align-items: center; font-size: 12.5px;
+    border: 1px solid var(--border); background: var(--panel-2);
+    border-radius: 8px; padding: 5px 9px; cursor: pointer; transition: border-color .15s;
+  }
+  .alias:hover { border-color: var(--accent); }
+  .alias b { font-family: var(--mono); font-weight: 600; font-size: 12px; }
+  .alias span { color: var(--muted); font-size: 11px; }
+  .alias.empty { opacity: .45; }
+
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  textarea { width: 100%; resize: vertical; min-height: 84px; line-height: 1.5; }
+  .out {
+    margin-top: 12px; background: #070a10; border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 15px; min-height: 110px; max-height: 340px; overflow: auto;
+    white-space: pre-wrap; word-break: break-word; font-size: 13.5px; line-height: 1.6;
+  }
+  .out .meta { color: var(--muted); font-size: 11.5px; display: block; margin-bottom: 8px; font-family: var(--mono); }
+  .authbar { display: none; margin-bottom: 16px; gap: 10px; align-items: center; }
+  .authbar.show { display: flex; }
+  .authbar input { flex: 1; min-width: 200px; font-family: var(--mono); }
+
+  footer { margin-top: 26px; color: var(--muted); font-size: 12.5px; display: flex; gap: 16px; flex-wrap: wrap; }
+  kbd {
+    font-family: var(--mono); font-size: 11px; background: var(--panel-2);
+    border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px;
+  }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 64 64" fill="none">
+        <g stroke="#7c9cff" stroke-width="4" stroke-linecap="round">
+          <path d="M14 32h10"/><path d="M40 32h10"/>
+          <path d="M24 32c7 0 7-12 14-12"/><path d="M24 32c7 0 7 12 14 12"/>
+        </g>
+        <circle cx="14" cy="32" r="5" fill="#7c9cff"/>
+        <circle cx="50" cy="20" r="5" fill="#5eead4"/>
+        <circle cx="50" cy="44" r="5" fill="#f0abfc"/>
+      </svg>
+    </div>
+    <div class="brand">
+      <h1>FreeUnlimitedAIRouter</h1>
+      <p>One OpenAI-compatible endpoint · automatic fallback · key rotation</p>
+    </div>
+    <div class="spacer"></div>
+    <span class="pill" id="health"><i class="dot" id="dot"></i><span id="healthText">connecting…</span></span>
+    <button id="reload" title="Refresh now">Refresh</button>
+  </header>
+
+  <div class="authbar" id="authbar">
+    <input id="apiKey" type="password" placeholder="ROUTER_API_KEY" autocomplete="off">
+    <button id="saveKey">Save key</button>
+  </div>
+
+  <section class="grid stats" id="stats">
+    <div class="card stat"><div class="k">Requests</div><div class="v" id="sRequests">–</div><div class="s" id="sRequestsSub">&nbsp;</div></div>
+    <div class="card stat"><div class="k">Success rate</div><div class="v" id="sRate">–</div><div class="s" id="sRateSub">&nbsp;</div></div>
+    <div class="card stat"><div class="k">Avg latency</div><div class="v" id="sLatency">–</div><div class="s">last successful</div></div>
+    <div class="card stat"><div class="k">Fallbacks</div><div class="v" id="sFallback">–</div><div class="s">provider switches</div></div>
+    <div class="card stat"><div class="k">Tokens</div><div class="v" id="sTokens">–</div><div class="s" id="sTokensSub">&nbsp;</div></div>
+  </section>
+
+  <section class="grid cols" style="margin-bottom:16px">
+    <div class="card">
+      <h2>Providers</h2>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Provider</th><th>Keys</th><th class="num">Req</th><th class="num">Err</th>
+              <th class="num">Avg</th><th>Last error</th>
+            </tr>
+          </thead>
+          <tbody id="providers"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Aliases</h2>
+      <div class="aliases" id="aliasList"></div>
+      <p class="muted" style="font-size:12.5px;margin:14px 0 0">
+        Send any alias or <code>provider/model</code> as <code>model</code>.
+      </p>
+      <button id="reset" style="margin-top:14px;width:100%">Reset cool-downs &amp; counters</button>
+    </div>
+  </section>
+
+  <section class="card" style="margin-bottom:16px">
+    <h2>Playground</h2>
+    <div class="row" style="margin-bottom:10px">
+      <select id="model" style="min-width:230px"></select>
+      <label class="muted" style="display:flex;align-items:center;gap:6px;font-size:13px">
+        <input type="checkbox" id="stream" checked style="width:auto"> stream
+      </label>
+      <div class="spacer"></div>
+      <button class="primary" id="send">Send</button>
+    </div>
+    <textarea id="prompt" placeholder="Ask something… (Ctrl+Enter to send)">Explain what a fallback router does, in two sentences.</textarea>
+    <div class="out" id="out"><span class="meta">no request sent yet</span></div>
+  </section>
+
+  <section class="card">
+    <h2>Recent requests</h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Time</th><th>Requested</th><th>Served by</th><th class="num">Status</th><th class="num">ms</th><th class="num">Tokens</th></tr>
+        </thead>
+        <tbody id="recent"><tr><td colspan="6" class="muted">Nothing yet.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <span><kbd>POST</kbd> /v1/chat/completions</span>
+    <span><kbd>GET</kbd> /v1/models</span>
+    <span><kbd>GET</kbd> /api/status</span>
+    <span style="margin-left:auto">FreeUnlimitedAIRouter · MIT</span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const state = { status: null, key: localStorage.getItem('router_key') || '', game: null };
+
+  const esc = (value) => String(value ?? '');
+
+  function headers(extra) {
+    const h = { 'content-type': 'application/json', ...(extra || {}) };
+    if (state.key) h.authorization = 'Bearer ' + state.key;
+    return h;
+  }
+
+  async function api(path, options) {
+    const res = await fetch(path, { ...options, headers: headers(options && options.headers) });
+    if (!res.ok) {
+      let detail = res.status + ' ' + res.statusText;
+      try { const j = await res.json(); detail = j?.error?.message || detail; } catch {}
+      throw new Error(detail);
+    }
+    return res.json();
+  }
+
+  function fmtMs(ms) {
+    if (!ms) return '–';
+    return ms < 1000 ? ms + ' ms' : (ms / 1000).toFixed(1) + ' s';
+  }
+
+  function fmtNum(n) {
+    if (n === null || n === undefined) return '–';
+    return n >= 10000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+  }
+
+  function timeAgo(ts) {
+    if (!ts) return '–';
+    const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (s < 60) return s + 's ago';
+    if (s < 3600) return Math.round(s / 60) + 'm ago';
+    return Math.round(s / 3600) + 'h ago';
+  }
+
+  function renderProviders(providers) {
+    const body = $('providers');
+    body.textContent = '';
+    const sorted = [...providers].sort((a, b) => Number(b.configured) - Number(a.configured));
+
+    for (const p of sorted) {
+      const tr = document.createElement('tr');
+
+      const tdName = document.createElement('td');
+      const name = document.createElement('div');
+      name.className = 'name';
+      const label = document.createElement('span');
+      label.textContent = p.label;
+      name.appendChild(label);
+      const tag = document.createElement('span');
+      tag.className = 'tag ' + (p.free ? 'free' : 'paid');
+      tag.textContent = p.free ? 'free' : 'paid';
+      name.appendChild(tag);
+      tdName.appendChild(name);
+
+      const sub = document.createElement('div');
+      sub.className = 'muted';
+      sub.style.fontSize = '11.5px';
+      sub.style.fontFamily = 'var(--mono)';
+      sub.textContent = p.configured
+        ? p.models.length + ' model' + (p.models.length === 1 ? '' : 's') + (p.style === 'anthropic' ? ' · anthropic' : '')
+        : (p.requiresKey ? 'no API key' : 'not configured');
+      tdName.appendChild(sub);
+      tr.appendChild(tdName);
+
+      const tdKeys = document.createElement('td');
+      const keys = document.createElement('div');
+      keys.className = 'keys';
+      const entries = p.keys.keys || [];
+      for (const k of entries) {
+        const bar = document.createElement('i');
+        bar.className = 'keybar ' + (!k.present ? '' : k.cooling ? 'cool' : 'ok');
+        bar.title = k.label + (k.cooling ? ' · cooling ' + Math.ceil(k.cooldownMs / 1000) + 's' : ' · ready') +
+                    (k.lastError ? '\n' + k.lastError : '');
+        keys.appendChild(bar);
+      }
+      tdKeys.appendChild(keys);
+      tr.appendChild(tdKeys);
+
+      const stats = state.status?.stats?.providers?.[p.id] || { requests: 0, failed: 0, avgMs: 0 };
+      const tdReq = document.createElement('td'); tdReq.className = 'num'; tdReq.textContent = fmtNum(stats.requests);
+      const tdErr = document.createElement('td'); tdErr.className = 'num';
+      tdErr.textContent = fmtNum(stats.failed);
+      if (stats.failed) tdErr.style.color = 'var(--bad)';
+      const tdAvg = document.createElement('td'); tdAvg.className = 'num'; tdAvg.textContent = stats.avgMs ? fmtMs(stats.avgMs) : '–';
+
+      const tdLast = document.createElement('td');
+      const lastErr = p.keys.keys.find((k) => k.lastError)?.lastError || stats.lastError;
+      const err = document.createElement('div');
+      err.className = lastErr ? 'err' : 'muted';
+      err.textContent = lastErr || '—';
+      if (lastErr) err.title = lastErr;
+      tdLast.appendChild(err);
+
+      tr.append(tdReq, tdErr, tdAvg, tdLast);
+      body.appendChild(tr);
+    }
+
+    if (!sorted.length) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 6; td.className = 'muted';
+      td.textContent = 'No providers configured yet — add a key to .env.';
+      tr.appendChild(td); body.appendChild(tr);
+    }
+  }
+
+  function renderAliases(aliases) {
+    const list = $('aliasList');
+    list.textContent = '';
+    const select = $('model');
+    const previous = select.value;
+    select.textContent = '';
+
+    for (const [name, info] of Object.entries(aliases)) {
+      if (name === 'all') continue;
+      const chip = document.createElement('button');
+      chip.className = 'alias' + (info.available ? '' : ' empty');
+      chip.type = 'button';
+      chip.title = info.available
+        ? info.candidates.slice(0, 12).join('\n')
+        : 'No configured provider serves this alias';
+      const b = document.createElement('b'); b.textContent = name;
+      const s = document.createElement('span'); s.textContent = info.available + '/' + info.candidates.length;
+      chip.append(b, s);
+      chip.addEventListener('click', () => { select.value = name; $('prompt').focus(); });
+      list.appendChild(chip);
+
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name + (info.available ? '' : ' (unavailable)');
+      select.appendChild(option);
+    }
+
+    if (state.status) {
+      const group = document.createElement('optgroup');
+      group.label = 'Models';
+      for (const p of state.status.providers) {
+        for (const m of p.models) {
+          const option = document.createElement('option');
+          option.value = p.id + '/' + m.id;
+          option.textContent = p.id + '/' + m.id;
+          group.appendChild(option);
+        }
+      }
+      if (group.children.length) select.appendChild(group);
+    }
+
+    select.value = previous || 'free';
+  }
+
+  function renderStats(stats) {
+    $('sRequests').textContent = fmtNum(stats.totals.requests);
+    $('sRequestsSub').textContent = stats.totals.streamed + ' streamed';
+    $('sRate').textContent = stats.successRate === null ? '–' : stats.successRate + '%';
+    $('sRateSub').textContent = stats.totals.failed + ' failed';
+    const withLatency = Object.values(stats.providers).filter((p) => p.avgMs > 0);
+    const avg = withLatency.length
+      ? Math.round(withLatency.reduce((a, p) => a + p.avgMs, 0) / withLatency.length)
+      : 0;
+    $('sLatency').textContent = fmtMs(avg);
+    $('sFallback').textContent = fmtNum(stats.totals.fallbacks);
+    const tokens = stats.totals.promptTokens + stats.totals.completionTokens;
+    $('sTokens').textContent = fmtNum(tokens);
+    $('sTokensSub').textContent = fmtNum(stats.totals.promptTokens) + ' in / ' + fmtNum(stats.totals.completionTokens) + ' out';
+
+    const recent = $('recent');
+    recent.textContent = '';
+    if (!stats.recent.length) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 6; td.className = 'muted'; td.textContent = 'Nothing yet.';
+      tr.appendChild(td); recent.appendChild(tr);
+      return;
+    }
+    for (const r of stats.recent.slice(0, 12)) {
+      const tr = document.createElement('tr');
+      const cells = [
+        timeAgo(r.at),
+        r.requested || r.model,
+        r.ok ? r.provider + '/' + r.model : r.provider,
+        String(r.status ?? (r.ok ? 200 : '–')),
+        r.ms ? String(r.ms) : '–',
+        r.tokens ? String(r.tokens) : '–'
+      ];
+      cells.forEach((value, index) => {
+        const td = document.createElement('td');
+        td.textContent = value;
+        if (index >= 3) { td.className = 'num'; td.style.fontVariantNumeric = 'tabular-nums'; }
+        if (index === 1) td.style.fontFamily = 'var(--mono)';
+        if (index === 3 && !r.ok) td.style.color = 'var(--bad)';
+        if (index === 0) td.className = 'muted';
+        tr.appendChild(td);
+      });
+      recent.appendChild(tr);
+    }
+  }
+
+  function renderHealth(status) {
+    const ready = status.providers.filter((p) => p.configured).length;
+    const dot = $('dot');
+    dot.className = 'dot ' + (ready ? 'ok' : 'bad');
+    $('healthText').textContent = ready ? ready + ' provider' + (ready === 1 ? '' : 's') + ' ready' : 'no provider configured';
+    $('authbar').classList.toggle('show', Boolean(status.auth_required) && !state.key);
+  }
+
+  async function load() {
+    try {
+      const data = await api('/api/status');
+      state.status = data;
+      renderHealth(data);
+      renderProviders(data.providers);
+      renderAliases(data.aliases);
+      renderStats(data.stats);
+    } catch (error) {
+      $('dot').className = 'dot bad';
+      $('healthText').textContent = error.message.includes('401') ? 'API key required' : 'router unreachable';
+      $('authbar').classList.add('show');
+    }
+  }
+
+  async function send() {
+    const button = $('send');
+    const out = $('out');
+    const model = $('model').value || 'free';
+    const prompt = $('prompt').value.trim();
+    if (!prompt) return;
+
+    button.disabled = true;
+    out.textContent = '';
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = model + ' · waiting…';
+    out.appendChild(meta);
+    const text = document.createElement('span');
+    out.appendChild(text);
+
+    const started = performance.now();
+    try {
+      const response = await fetch('/v1/chat/completions', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          model,
+          stream: $('stream').checked,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error?.error?.message || response.status + ' ' + response.statusText);
+      }
+
+      if (!$('stream').checked) {
+        const data = await response.json();
+        meta.textContent = (data.router?.provider || '?') + '/' + (data.router?.model || '?') +
+          ' · ' + Math.round(performance.now() - started) + ' ms · ' + (data.router?.attempts || 1) + ' attempt(s)';
+        text.textContent = data.choices?.[0]?.message?.content || '(empty response)';
+        return;
+      }
+
+      meta.textContent = (response.headers.get('x-router-provider') || '?') + '/' +
+        (response.headers.get('x-router-model') || '?') + ' · streaming';
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let first = true;
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop();
+        for (const part of parts) {
+          const line = part.split('\n').find((l) => l.startsWith('data:'));
+          if (!line) continue;
+          const payload = line.slice(5).trim();
+          if (payload === '[DONE]') continue;
+          try {
+            const chunk = JSON.parse(payload);
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (typeof delta === 'string' && delta) {
+              if (first) { first = false; }
+              text.textContent += delta;
+              out.scrollTop = out.scrollHeight;
+            }
+          } catch {}
+        }
+      }
+      meta.textContent = (response.headers.get('x-router-provider') || '?') + '/' +
+        (response.headers.get('x-router-model') || '?') + ' · ' + Math.round(performance.now() - started) + ' ms · ' +
+        (response.headers.get('x-router-attempts') || '1') + ' attempt(s)';
+    } catch (error) {
+      meta.textContent = 'error';
+      text.textContent = error.message;
+      text.style.color = 'var(--bad)';
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  $('reload').addEventListener('click', load);
+  $('send').addEventListener('click', send);
+  $('reset').addEventListener('click', async () => {
+    try { await api('/api/reset', { method: 'POST', body: '{}' }); await load(); } catch (e) { alert(e.message); }
+  });
+  $('saveKey').addEventListener('click', () => {
+    state.key = $('apiKey').value.trim();
+    localStorage.setItem('router_key', state.key);
+    $('authbar').classList.remove('show');
+    load();
+  });
+  $('prompt').addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') send();
+  });
+
+  load();
+  setInterval(() => { if (!document.hidden) load(); }, 5000);
+})();
+</script>
+</body>
+</html>

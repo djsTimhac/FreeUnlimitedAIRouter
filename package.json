@@ -1,0 +1,49 @@
+{
+  "name": "free-unlimited-ai-router",
+  "version": "1.0.0",
+  "description": "One OpenAI-compatible endpoint in front of many AI providers. Automatic fallback, API key rotation, rate-limit cooldowns, streaming and a live dashboard. Zero dependencies.",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "free-ai-router": "src/index.js"
+  },
+  "files": [
+    "src",
+    "public",
+    "README.md",
+    "LICENSE",
+    "router.config.example.json",
+    ".env.example"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test",
+    "check": "node --check src/index.js"
+  },
+  "keywords": [
+    "ai",
+    "llm",
+    "router",
+    "gateway",
+    "openai-compatible",
+    "openai-api",
+    "fallback",
+    "load-balancer",
+    "llm-proxy",
+    "free-llm"
+  ],
+  "license": "MIT",
+  "author": "djsTimhac",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/djsTimhac/FreeUnlimitedAIRouter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/djsTimhac/FreeUnlimitedAIRouter/issues"
+  },
+  "homepage": "https://github.com/djsTimhac/FreeUnlimitedAIRouter#readme"
+}

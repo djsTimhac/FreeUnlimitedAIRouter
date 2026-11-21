@@ -1,0 +1,23 @@
+{
+  "$schema": "./router.config.schema.json",
+  "defaultAlias": "free",
+  "maxAttempts": 6,
+  "aliases": {
+    "cheap": ["groq/openai/gpt-oss-20b", "openrouter/nvidia/nemotron-3.5-lightning:free"],
+    "mine": ["ollama/llama3.2", "lmstudio/local-model"]
+  },
+  "providers": {
+    "groq": {
+      "keys": ["gsk_replace_me"]
+    },
+    "mylocal": {
+      "label": "My vLLM",
+      "baseUrl": "http://localhost:8000/v1",
+      "style": "openai",
+      "requiresKey": false,
+      "models": [
+        { "id": "Qwen/Qwen2.5-7B-Instruct", "tags": ["free", "fast"] }
+      ]
+    }
+  }
+}

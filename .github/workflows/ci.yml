@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Tests
+        run: npm test
+
+      - name: Server smoke test
+        run: |
+          set -euo pipefail
+          node src/index.js --port 8787 --no-dotenv &
+          SERVER_PID=$!
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8787/health > /tmp/health.json; then break; fi
+            sleep 0.25
+          done
+          cat /tmp/health.json
+          grep -q '"status"' /tmp/health.json
+          curl -fsS http://127.0.0.1:8787/v1/models > /tmp/models.json
+          head -c 300 /tmp/models.json
+          kill $SERVER_PID
