@@ -529,6 +529,8 @@
       renderProviders(data.providers);
       renderAliases(data.aliases);
       renderStats(data.stats);
+      // Known strings land before the paint; only new ones wait for a request.
+      if (window.fuApply) window.fuApply(document.body);
     } catch (error) {
       state.serialized = '';
       $('dot').className = 'dot bad';

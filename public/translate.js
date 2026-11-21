@@ -104,6 +104,7 @@
   var maps = Object.create(null); // language -> {english: translated}
   var active = SOURCE;
   var run = 0;
+  var busy = false;
   var applying = false;
   var timer = 0;
   var renderedAt = 0;
@@ -138,8 +139,9 @@
 
   /* Text worth translating: no code samples, no widget chrome, no whitespace,
      and nothing that carries no letters at all (counts, times, separators). */
-  function collect() {
-    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+  function collect(root) {
+    var scope = root && root.nodeType === 1 ? root : document.body;
+    var walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
       acceptNode: function (node) {
         var value = node.nodeValue;
         if (!value || value.trim().length < 2) return NodeFilter.FILTER_REJECT;
@@ -269,17 +271,20 @@
 
   function translate(target) {
     var current = ++run;
+    busy = true;
     active = target;
     document.documentElement.lang = target;
 
     var items = collect();
     if (!items.length) {
+      busy = false;
       reveal();
       return Promise.resolve();
     }
 
     if (target === SOURCE) {
       applySource(items);
+      busy = false;
       reveal();
       return Promise.resolve();
     }
@@ -297,6 +302,7 @@
     // Cached strings land immediately; only the rest waits for the network.
     applyTarget(items, map);
     if (!missing.length) {
+      busy = false;
       reveal();
       return Promise.resolve();
     }
@@ -317,6 +323,7 @@
       });
     }, Promise.resolve()).then(function () {
       if (current !== run) return;
+      busy = false;
       saveDict(target, added);
       applyTarget(items, map);
       reveal();
@@ -328,8 +335,29 @@
   function schedule() {
     if (applying || active === SOURCE) return;
     clearTimeout(timer);
-    timer = setTimeout(function () { translate(active); }, LIVE_DELAY);
+    timer = setTimeout(function () {
+      // A translation that is already running will pick these nodes up itself;
+      // asking twice for the same strings only burns a request.
+      if (busy) { schedule(); return; }
+      translate(active);
+    }, LIVE_DELAY);
   }
+
+  /* Called by the page right after it renders: strings the dictionary already
+     knows are swapped before the browser paints, so a polling table never
+     flashes English. Only unknown strings wait for the next request. */
+  function applyKnown(root) {
+    if (active === SOURCE || !root) return;
+    var items = collect(root);
+    if (!items.length) return;
+    var map = dict(active);
+    applyTarget(items, map);
+    for (var i = 0; i < items.length; i++) {
+      if (!map[items[i].text]) { schedule(); return; }
+    }
+  }
+
+  window.fuApply = applyKnown;
 
   if (window.MutationObserver) {
     new MutationObserver(function (records) {
