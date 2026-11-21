@@ -784,12 +784,16 @@
     .gh-btn { padding: 8px 11px; }
   }
 
-  /* Google Translate injects its own banner and gadget; we use a custom picker. */
-  #google_translate_element { display: none !important; }
+  /* Google Translate renders its own <select>; hide its chrome, keep its options. */
   .goog-te-banner-frame, .goog-te-balloon-frame { display: none !important; }
   body { top: 0 !important; }
   font.goog-te-text { background: transparent !important; }
   .goog-logo-link, .goog-te-gadget-icon { display: none !important; }
+  .lang #google_translate_element { display: flex; align-items: center; }
+  .lang .goog-te-gadget { font-size: 0 !important; line-height: 0; color: transparent; white-space: nowrap; }
+  .lang .goog-te-gadget > span { display: none !important; }
+  .lang .goog-te-combo { margin: 0 !important; height: auto !important; vertical-align: middle; }
+  .lang .goog-te-combo option { background: #0a0c11; color: var(--text); }
 
   /* ── reveal ──────────────────────────────────────────────────────────── */
   .reveal { opacity: 0; transform: translateY(18px); transition: opacity .8s var(--ease), transform .8s var(--ease); }
@@ -844,7 +848,7 @@
 
     <div class="lang notranslate" title="Translate this page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.7 4 6 4 9s-1.4 6.3-4 9c-2.6-2.7-4-6-4-9s1.4-6.3 4-9Z"/></svg>
-      <select id="lang" aria-label="Translate this page"></select>
+      <div id="google_translate_element"></div>
     </div>
 
     <a class="gh-btn" href="https://github.com/djsTimhac/FreeUnlimitedAIRouter" target="_blank" rel="noopener">
@@ -1190,107 +1194,13 @@
 </script>
 
 <!-- Whole-page translation: Google Translate website translator, driven by our own picker. -->
-<div id="google_translate_element" aria-hidden="true"></div>
+
+<!-- Whole-page translation: the official Google Translate website translator. -->
 <script>
   window.googleTranslateElementInit = function () {
     new google.translate.TranslateElement({ pageLanguage: 'en', autoDisplay: false }, 'google_translate_element');
   };
 </script>
 <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async defer></script>
-<script>
-(() => {
-  /* Every language the website translator supports. Codes are Google's. */
-  const LANGS = [
-    ['en', 'English'], ['de', 'Deutsch'], ['fr', 'Français'], ['es', 'Español'], ['it', 'Italiano'],
-    ['pt', 'Português'], ['nl', 'Nederlands'], ['pl', 'Polski'], ['ru', 'Русский'], ['uk', 'Українська'],
-    ['cs', 'Čeština'], ['sk', 'Slovenčina'], ['hu', 'Magyar'], ['ro', 'Română'], ['bg', 'Български'],
-    ['hr', 'Hrvatski'], ['sr', 'Српски'], ['sl', 'Slovenščina'], ['bs', 'Bosanski'], ['mk', 'Македонски'],
-    ['sq', 'Shqip'], ['el', 'Ελληνικά'], ['tr', 'Türkçe'], ['sv', 'Svenska'], ['no', 'Norsk'],
-    ['da', 'Dansk'], ['fi', 'Suomi'], ['is', 'Íslenska'], ['et', 'Eesti'], ['lv', 'Latviešu'],
-    ['lt', 'Lietuvių'], ['be', 'Беларуская'], ['ca', 'Català'], ['gl', 'Galego'], ['eu', 'Euskara'],
-    ['cy', 'Cymraeg'], ['ga', 'Gaeilge'], ['gd', 'Gàidhlig'], ['mt', 'Malti'], ['lb', 'Lëtzebuergesch'],
-    ['fy', 'Frysk'], ['af', 'Afrikaans'], ['sw', 'Kiswahili'], ['am', 'አማርኛ'], ['so', 'Soomaali'],
-    ['yo', 'Yorùbá'], ['ig', 'Igbo'], ['ha', 'Hausa'], ['zu', 'isiZulu'], ['xh', 'isiXhosa'],
-    ['st', 'Sesotho'], ['sn', 'Shona'], ['ny', 'Chichewa'], ['rw', 'Kinyarwanda'], ['ar', 'العربية'],
-    ['he', 'עברית'], ['fa', 'فارسی'], ['ur', 'اردو'], ['ps', 'پښتو'], ['ku', 'Kurdî'],
-    ['sd', 'سنڌي'], ['hi', 'हिन्दी'], ['bn', 'বাংলা'], ['pa', 'ਪੰਜਾਬੀ'], ['gu', 'ગુજરાતી'],
-    ['mr', 'मराठी'], ['ta', 'தமிழ்'], ['te', 'తెలుగు'], ['kn', 'ಕನ್ನಡ'], ['ml', 'മലയാളം'],
-    ['si', 'සිංහල'], ['ne', 'नेपाली'], ['th', 'ไทย'], ['lo', 'ລາວ'], ['km', 'ខ្មែរ'],
-    ['my', 'မြန်မာ'], ['vi', 'Tiếng Việt'], ['id', 'Bahasa Indonesia'], ['ms', 'Bahasa Melayu'],
-    ['tl', 'Filipino'], ['jw', 'Jawa'], ['su', 'Sunda'], ['ceb', 'Cebuano'], ['zh-CN', '中文（简体）'],
-    ['zh-TW', '中文（繁體）'], ['ja', '日本語'], ['ko', '한국어'], ['mn', 'Монгол'], ['kk', 'Қазақ'],
-    ['ky', 'Кыргызча'], ['uz', 'Oʻzbek'], ['tg', 'Тоҷикӣ'], ['az', 'Azərbaycan'], ['hy', 'Հայերեն'],
-    ['ka', 'ქართული'], ['eo', 'Esperanto'], ['la', 'Latina'], ['mi', 'Māori'], ['haw', 'ʻŌlelo Hawaiʻi'],
-    ['hmn', 'Hmong'], ['sm', 'Samoa'], ['tt', 'Татар'], ['ug', 'ئۇيغۇرچە'], ['yi', 'ייִדיש'],
-    ['co', 'Corsu']
-  ];
-
-  const KEY = 'fu-router-lang';
-  const select = document.getElementById('lang');
-  if (!select) return;
-
-  // Older builds translated through the googtrans cookie; clear any leftover so
-  // the page is never translated on top of a stale language.
-  document.cookie = 'googtrans=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-  try {
-    document.cookie = 'googtrans=; path=/; domain=' + location.hostname + '; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-  } catch (e) { /* host-only cookie is enough */ }
-
-  const has = (code) => LANGS.some(([c]) => c.toLowerCase() === String(code).toLowerCase());
-  const canonical = (code) => {
-    const hit = LANGS.find(([c]) => c.toLowerCase() === String(code).toLowerCase());
-    return hit ? hit[0] : null;
-  };
-
-  const current = () => localStorage.getItem(KEY) || 'en';
-
-  /* Google Translate keeps the original DOM and re-translates from it, so driving
-     its own <select class="goog-te-combo"> is instant and never double-translates
-     (which a googtrans cookie plus reload does). */
-  function apply(code, attempt = 0) {
-    const combo = document.querySelector('.goog-te-combo');
-    if (!combo) {
-      if (attempt < 50) setTimeout(() => apply(code, attempt + 1), 200);
-      return;
-    }
-    const target = code === 'en' ? '' : code;
-    if (combo.value === target) return;
-    combo.value = target;
-    combo.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
-  function go(code) {
-    localStorage.setItem(KEY, code);
-    apply(code);
-  }
-
-  // First visit: follow the browser language instead of making people hunt for it.
-  if (!localStorage.getItem(KEY)) {
-    let detected = (navigator.language || 'en').toLowerCase();
-    if (detected === 'zh' || detected.startsWith('zh-han') || detected === 'zh-cn') detected = 'zh-CN';
-    else if (detected === 'zh-tw' || detected === 'zh-hk' || detected === 'zh-hant') detected = 'zh-TW';
-    else if (detected === 'nb' || detected === 'nn') detected = 'no';
-    else detected = detected.slice(0, 2);
-
-    localStorage.setItem(KEY, canonical(detected) || 'en');
-  }
-
-  // ?lang=de lets you deep-link a translated page.
-  const fromUrl = new URLSearchParams(location.search).get('lang');
-  if (fromUrl && has(fromUrl)) localStorage.setItem(KEY, canonical(fromUrl));
-
-  for (const [code, name] of LANGS) {
-    const option = document.createElement('option');
-    option.value = code;
-    option.textContent = name;
-    option.lang = code;
-    select.appendChild(option);
-  }
-  const initial = current();
-  select.value = initial;
-  select.addEventListener('change', () => go(select.value));
-  if (initial !== 'en') apply(initial);
-})();
-</script>
 </body>
 </html>
