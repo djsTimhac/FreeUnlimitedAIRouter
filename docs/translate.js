@@ -65,7 +65,19 @@
     });
     var items = [];
     while (walker.nextNode()) {
-      items.push({ node: walker.currentNode, text: walker.currentNode.nodeValue, index: items.length });
+      var node = walker.currentNode;
+      var raw = node.nodeValue;
+      var core = raw.trim();
+      var at = raw.indexOf(core);
+      // Inline siblings are separated by their own whitespace, so keep the exact
+      // runs around each core and re-attach them after translating.
+      items.push({
+        node: node,
+        text: core,
+        lead: raw.slice(0, at),
+        tail: raw.slice(at + core.length),
+        index: items.length
+      });
     }
     return items;
   }
@@ -117,7 +129,7 @@
 
   function applyAll(items) {
     items.forEach(function (item) {
-      if (item.text) item.node.nodeValue = item.text;
+      if (item.text) item.node.nodeValue = item.lead + item.text + item.tail;
     });
   }
 
@@ -133,7 +145,7 @@
         if (saved.src[i] !== snapshot[i].text.trim()) return null;
       }
       return snapshot.map(function (item, i) {
-        return { node: item.node, text: saved.dst[i] || item.text };
+        return { node: item.node, text: saved.dst[i] || item.text, lead: item.lead, tail: item.tail };
       });
     } catch (e) {
       return null;
@@ -180,7 +192,7 @@
     }, Promise.resolve()).then(function () {
       if (current !== run) return;
       var out = snapshot.map(function (item, i) {
-        return { node: item.node, text: results[i] || item.text };
+        return { node: item.node, text: results[i] || item.text, lead: item.lead, tail: item.tail };
       });
       applyAll(out);
       writeCache(target, out);
