@@ -163,6 +163,10 @@
     } catch (e) { /* quota or private mode: just translate again next time */ }
   }
 
+  function reveal() {
+    document.documentElement.removeAttribute('data-i18n');
+  }
+
   function translate(target) {
     var current = ++run;
     if (!snapshot) snapshot = collect();
@@ -170,12 +174,14 @@
 
     if (target === SOURCE) {
       restore();
+      reveal();
       return Promise.resolve();
     }
 
     var cached = readCache(target);
     if (cached) {
       applyAll(cached);
+      reveal();
       return Promise.resolve();
     }
 
@@ -198,6 +204,7 @@
       });
       applyAll(out);
       writeCache(target, out);
+      reveal();
     });
   }
 

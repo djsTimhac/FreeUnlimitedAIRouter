@@ -785,6 +785,11 @@
   }
 
   /* ── reveal ──────────────────────────────────────────────────────────── */
+  /* First visit in another language: the head script holds the English copy
+     back until translate.js has swapped it, then this reveals the page. */
+  body { transition: opacity .25s var(--ease); }
+  html[data-i18n="pending"] body { opacity: 0; }
+
   .reveal { opacity: 0; transform: translateY(18px); transition: opacity .8s var(--ease), transform .8s var(--ease); }
   .reveal.in { opacity: 1; transform: none; }
 
@@ -809,18 +814,27 @@
 */
 (function () {
   try {
-    if (localStorage.getItem('fu-lang')) return;
+    var stored = localStorage.getItem('fu-lang');
     var tag = String((navigator.languages && navigator.languages[0]) || navigator.language || 'en').toLowerCase();
-    var code = tag.indexOf('zh') === 0
+    var detected = tag.indexOf('zh') === 0
       ? (/hant|tw|hk|mo/.test(tag) ? 'zh-TW' : 'zh-CN')
       : tag.split('-')[0];
-    localStorage.setItem('fu-lang', code || 'en');
+    var code = stored || detected || 'en';
+    if (!stored) localStorage.setItem('fu-lang', code);
+
+    /* Hold the English copy back for the moment the swap takes, so a visitor
+       never sees the page flip. The timer is the safety net: if the translation
+       never arrives, the English page shows anyway. */
+    if (code !== 'en') {
+      document.documentElement.setAttribute('data-i18n', 'pending');
+      setTimeout(function () { document.documentElement.removeAttribute('data-i18n'); }, 3000);
+    }
   } catch (e) {
     /* storage blocked: translate.js falls back to the browser language */
   }
 })();
 </script>
-<script src="translate.js?v=2" defer></script>
+<script src="translate.js?v=3" defer></script>
 </head>
 <body>
 
