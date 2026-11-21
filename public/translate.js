@@ -16,7 +16,10 @@
   var STORE = 'fu-lang';
   var CACHE_PREFIX = 'fu-cache:';
   var ENDPOINT = 'https://translate.googleapis.com/translate_a/t?client=gtx';
-  var MAX_PAYLOAD = 1800;
+  var MAX_QUERY = 6000; // measured: a ~5k URL still answers, with headroom
+  var LANG_CACHE = 'fu-langs';
+  var LANG_TTL = 30 * 24 * 3600 * 1000;
+  var LANG_REFRESH = 24 * 3600 * 1000;
   var CACHE_VERSION = 3; // bump when the applied text changes shape
   var SKIP = 'script,style,noscript,code,pre,textarea,input,select,option,[data-no-translate]';
 
@@ -120,22 +123,25 @@
     return items;
   }
 
-  /* Keep each request comfortably inside URL limits. */
-  function chunk(items) {
+  /* Pack as much text as the URL allows into one request: every batch is a
+     full round trip, so the whole page usually leaves in a single call. */
+  function chunk(texts) {
     var batches = [];
     var batch = [];
     var size = 0;
-    items.forEach(function (item) {
-      var length = item.text.length + 12;
-      if (batch.length && size + length > MAX_PAYLOAD) {
-        batches.push(batch);
+    var start = 0;
+    texts.forEach(function (text, i) {
+      var length = encodeURIComponent(text).length + 3; // "&q=" plus the value
+      if (batch.length && size + length > MAX_QUERY) {
+        batches.push({ start: start, texts: batch });
         batch = [];
+        start = i;
         size = 0;
       }
-      batch.push(item);
+      batch.push(text);
       size += length;
     });
-    if (batch.length) batches.push(batch);
+    if (batch.length) batches.push({ start: start, texts: batch });
     return batches;
   }
 
@@ -145,7 +151,7 @@
      goes missing and those lines silently stay English. */
   function request(batch, target) {
     var url = ENDPOINT + '&sl=' + SOURCE + '&tl=' + encodeURIComponent(target) +
-      batch.map(function (item) { return '&q=' + encodeURIComponent(item.text.replace(/\s+/g, ' ')); }).join('');
+      batch.map(function (text) { return '&q=' + encodeURIComponent(text.replace(/\s+/g, ' ')); }).join('');
 
     return fetch(url).then(function (res) {
       if (!res.ok) throw new Error('translate HTTP ' + res.status);
@@ -154,7 +160,7 @@
       var list = Array.isArray(data) ? data : [data];
       if (list.length !== batch.length) {
         // Rather than shift translations onto the wrong nodes, ask one by one.
-        return Promise.all(batch.map(function (item) { return requestOne(item.text, target); }));
+        return Promise.all(batch.map(function (text) { return requestOne(text, target); }));
       }
       return list.map(function (entry) {
         if (typeof entry === 'string') return entry;
@@ -177,6 +183,7 @@
 
   var snapshot = null;
   var run = 0;
+  var active = SOURCE;
   var select = document.getElementById('lang');
 
   function applyAll(items) {
@@ -222,6 +229,7 @@
     var current = ++run;
     if (!snapshot) snapshot = collect();
     document.documentElement.lang = target;
+    active = target;
 
     if (target === SOURCE) {
       restore();
@@ -236,13 +244,26 @@
       return Promise.resolve();
     }
 
-    var results = new Array(snapshot.length);
-    return chunk(snapshot).reduce(function (chain, batch) {
+    /* Repeated labels are sent once and mapped onto every node that uses them. */
+    var texts = [];
+    var slots = new Array(snapshot.length);
+    var seen = Object.create(null);
+    snapshot.forEach(function (item, i) {
+      var key = item.text;
+      if (!(key in seen)) {
+        seen[key] = texts.length;
+        texts.push(key);
+      }
+      slots[i] = seen[key];
+    });
+
+    var results = new Array(texts.length);
+    return chunk(texts).reduce(function (chain, batch) {
       return chain.then(function () {
         if (current !== run) return;
-        return request(batch, target).then(function (texts) {
-          texts.forEach(function (text, i) {
-            if (text) results[batch[i].index] = text;
+        return request(batch.texts, target).then(function (translated) {
+          translated.forEach(function (text, i) {
+            if (text) results[batch.start + i] = text;
           });
         }).catch(function () {
           /* a failed batch keeps its English text rather than blanking out */
@@ -251,7 +272,7 @@
     }, Promise.resolve()).then(function () {
       if (current !== run) return;
       var out = snapshot.map(function (item, i) {
-        return { node: item.node, text: results[i] || item.text, lead: item.lead, tail: item.tail };
+        return { node: item.node, text: results[slots[i]] || item.text, lead: item.lead, tail: item.tail };
       });
       applyAll(out);
       writeCache(target, out);
@@ -263,15 +284,37 @@
 
   select.addEventListener('change', function () {
     var code = canonical(select.value) || SOURCE;
+    // Rebuilding the picker can move the selection on a focused select; that
+    // is not a choice, so it must never start a translation on its own.
+    if (Date.now() - renderedAt < 250 || code === active) return;
     try { localStorage.setItem(STORE, code); } catch (e) { /* ignore */ }
     translate(code);
   });
 
-  var requested = new URLSearchParams(location.search).get('lang');
-  var storedRaw = '';
-  try { storedRaw = localStorage.getItem(STORE) || ''; } catch (e) { /* ignore */ }
+  /* The picker needs every language, the page needs one. The full list is
+     cached, and the built-in names are enough to start translating, so the
+     first string is on its way before the list request has answered. */
+  function readLangCache() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(LANG_CACHE) || 'null');
+      if (!saved || !Array.isArray(saved.list) || saved.list.length < 50) return null;
+      var age = Date.now() - (saved.at || 0);
+      if (age > LANG_TTL) return null;
+      return { list: saved.list, stale: age > LANG_REFRESH };
+    } catch (e) {
+      return null;
+    }
+  }
 
-  function boot(list) {
+  function writeLangCache(list) {
+    try {
+      localStorage.setItem(LANG_CACHE, JSON.stringify({ at: Date.now(), list: list }));
+    } catch (e) { /* quota or private mode: just fetch it next time */ }
+  }
+
+  var renderedAt = 0;
+
+  function renderOptions(list) {
     index(list);
     select.innerHTML = '';
     list.forEach(function (pair) {
@@ -280,22 +323,75 @@
       option.textContent = pair[1];
       select.appendChild(option);
     });
+    renderedAt = Date.now();
+  }
 
+  /* Fill the picker with everything Google accepts without blocking the page. */
+  function refreshLanguages() {
+    loadLanguages().then(function (list) {
+      if (!list) return;
+      writeLangCache(list);
+      renderOptions(list);
+      select.value = active;
+    }).catch(function () { /* the built-in list stays */ });
+  }
+
+  var requested = new URLSearchParams(location.search).get('lang');
+  var storedRaw = '';
+  try { storedRaw = localStorage.getItem(STORE) || ''; } catch (e) { /* ignore */ }
+  var browserTags = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language])
+    .map(function (tag) { return String(tag || ''); });
+
+  function browserCode() {
+    for (var i = 0; i < browserTags.length; i++) {
+      var code = canonical(browserTags[i]);
+      if (code) return code;
+    }
+    return '';
+  }
+
+  var englishBrowser = browserTags.some(function (tag) { return /^en(-|$)/i.test(tag); });
+  var unknownBrowser = browserTags.some(function (tag) {
+    return tag && !/^en(-|$)/i.test(tag) && !canonical(tag);
+  });
+
+  function boot(list, code) {
+    renderOptions(list);
     var fromUrl = canonical(requested);
-    var start = fromUrl || canonical(storedRaw) ||
-      canonical((navigator.languages && navigator.languages[0]) || navigator.language) || SOURCE;
+    var target = code || fromUrl || canonical(storedRaw) || browserCode() || SOURCE;
 
     if (fromUrl) {
       try { localStorage.setItem(STORE, fromUrl); } catch (e) { /* ignore */ }
     }
 
-    select.value = start;
-    if (start !== SOURCE) translate(start);
+    select.value = target;
+    if (target !== SOURCE) translate(target);
+    else reveal();
   }
 
-  // Don't leave a translated page waiting on the language list forever.
-  var fallback = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 1400); });
-  Promise.race([loadLanguages().catch(function () { return null; }), fallback]).then(function (list) {
-    boot(list || NATIVE);
-  });
+  var cachedLangs = readLangCache();
+  if (cachedLangs) {
+    boot(cachedLangs.list);
+    if (cachedLangs.stale) refreshLanguages();
+  } else {
+    var explicitRaw = requested || storedRaw;
+    var explicitCode = canonical(requested) || canonical(storedRaw);
+    // An explicit choice decides on its own: an unknown stored language must
+    // wait for the full list instead of silently falling back to the browser.
+    var immediate = explicitRaw ? explicitCode : (browserCode() || (englishBrowser ? SOURCE : ''));
+
+    /* A stored choice or browser language the built-in shortlist cannot place
+       yet has to wait for the full list, or the page would start out in the
+       wrong language. Everything else starts right away. */
+    if (!immediate && (explicitRaw || unknownBrowser)) {
+      var fallback = new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 1400); });
+      Promise.race([loadLanguages().catch(function () { return null; }), fallback]).then(function (list) {
+        if (list) writeLangCache(list);
+        boot(list || NATIVE);
+      });
+    } else {
+      boot(NATIVE, immediate);
+      refreshLanguages();
+    }
+  }
 })();

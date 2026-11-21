@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FreeUnlimitedAIRouter</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://translate.googleapis.com" crossorigin>
 <style>
   :root {
     --bg: #0b0e14;
@@ -164,6 +165,11 @@
     border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px;
   }
   .scroll { overflow-x: auto; }
+
+  /* First visit in another language: hold the English copy back for the moment
+     the swap takes. Deliberately no transition - a background tab can stall one
+     and leave the page invisible. */
+  html[data-i18n="pending"] body { opacity: 0; }
 </style>
 <script data-lang-detect>
 /* First visit: remember the browser language. translate.js does the rest. */
@@ -174,7 +180,15 @@
     var detected = tag.indexOf('zh') === 0
       ? (/hant|tw|hk|mo/.test(tag) ? 'zh-TW' : 'zh-CN')
       : tag.split('-')[0];
-    if (!stored) localStorage.setItem('fu-lang', detected || 'en');
+    var code = stored || detected || 'en';
+    if (!stored) localStorage.setItem('fu-lang', code);
+
+    /* The same hold-back the landing page uses: if the translation never
+       arrives, the English dashboard shows after three seconds anyway. */
+    if (code !== 'en') {
+      document.documentElement.setAttribute('data-i18n', 'pending');
+      setTimeout(function () { document.documentElement.removeAttribute('data-i18n'); }, 3000);
+    }
   } catch (e) { /* storage blocked: translate.js detects again */ }
 })();
 </script>
