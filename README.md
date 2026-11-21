@@ -10,6 +10,7 @@ Automatic fallback · API-key rotation · rate-limit cool-downs · streaming · 
 [![License: MIT](https://img.shields.io/badge/License-MIT-7c9cff.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.17-5eead4.svg)](https://nodejs.org)
 [![Dependencies](https://img.shields.io/badge/runtime_dependencies-0-brightgreen.svg)](package.json)
+[![Website](https://img.shields.io/badge/website-live-5eead4.svg)](https://djsTimhac.github.io/FreeUnlimitedAIRouter/)
 
 </div>
 
