@@ -327,6 +327,9 @@
       saveDict(target, added);
       applyTarget(items, map);
       reveal();
+      // The page may have rendered while the request was in flight; those
+      // nodes were not in the batch, so give them the dictionary too.
+      applyKnown(document.body);
     });
   }
 

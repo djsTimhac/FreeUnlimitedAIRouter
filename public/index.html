@@ -282,15 +282,15 @@
         <thead>
           <tr><th>Time</th><th>Requested</th><th>Served by</th><th class="num">Status</th><th class="num">ms</th><th class="num">Tokens</th></tr>
         </thead>
-        <tbody id="recent" data-no-translate><tr><td colspan="6" class="muted">Nothing yet.</td></tr></tbody>
+        <tbody id="recent"><tr><td colspan="6" class="muted">Nothing yet.</td></tr></tbody>
       </table>
     </div>
   </section>
 
   <footer>
-    <span><kbd>POST</kbd> /v1/chat/completions</span>
-    <span><kbd>GET</kbd> /v1/models</span>
-    <span><kbd>GET</kbd> /api/status</span>
+    <span data-no-translate><kbd>POST</kbd> /v1/chat/completions</span>
+    <span data-no-translate><kbd>GET</kbd> /v1/models</span>
+    <span data-no-translate><kbd>GET</kbd> /api/status</span>
     <span style="margin-left:auto">FreeUnlimitedAIRouter · MIT</span>
   </footer>
 </div>
@@ -498,6 +498,7 @@
       cells.forEach((value, index) => {
         const td = document.createElement('td');
         td.textContent = value;
+        td.dataset.noTranslate = ''; // times, aliases, model ids, status, counts
         if (index >= 3) { td.className = 'num'; td.style.fontVariantNumeric = 'tabular-nums'; }
         if (index === 1) td.style.fontFamily = 'var(--mono)';
         if (index === 3 && !r.ok) td.style.color = 'var(--bad)';
