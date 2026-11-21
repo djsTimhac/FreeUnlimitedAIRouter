@@ -7,7 +7,9 @@
   browser language, and the choice survives reloads.
 
   English stays the source: switching back restores the original nodes, and
-  repeat visits reuse a cached translation instead of calling the API again.
+  repeat visits reuse cached strings instead of calling the API again. A
+  MutationObserver picks up text that arrives later, so a dashboard that
+  re-renders its tables is translated too.
 */
 (function () {
   'use strict';
@@ -15,12 +17,14 @@
   var SOURCE = 'en';
   var STORE = 'fu-lang';
   var CACHE_PREFIX = 'fu-cache:';
-  var ENDPOINT = 'https://translate.googleapis.com/translate_a/t?client=gtx';
-  var MAX_QUERY = 6000; // measured: a ~5k URL still answers, with headroom
   var LANG_CACHE = 'fu-langs';
   var LANG_TTL = 30 * 24 * 3600 * 1000;
   var LANG_REFRESH = 24 * 3600 * 1000;
-  var CACHE_VERSION = 3; // bump when the applied text changes shape
+  var ENDPOINT = 'https://translate.googleapis.com/translate_a/t?client=gtx';
+  var MAX_QUERY = 6000; // measured: a ~5k URL still answers, with headroom
+  var CACHE_VERSION = 4; // 4 stores a string map instead of a page snapshot
+  var MAX_ENTRIES = 900;
+  var LIVE_DELAY = 300;
   var SKIP = 'script,style,noscript,code,pre,textarea,select,option,[data-no-translate]';
 
   // Autonyms for the languages people pick most; the full set of what Google
@@ -93,7 +97,47 @@
     return byCode[value] || byCode[base] || byCode[ALIASES[base]] || byCode[ALIASES[value]] || '';
   }
 
-  /* Text worth translating: no code samples, no widget chrome, no whitespace. */
+  /* node -> {src, dst, lead, tail}: the English text, what is shown now, and
+     the exact whitespace around it. Source is always English, whatever the
+     node currently says, so a second language switch starts from the source. */
+  var texts = new WeakMap();
+  var maps = Object.create(null); // language -> {english: translated}
+  var active = SOURCE;
+  var run = 0;
+  var applying = false;
+  var timer = 0;
+  var renderedAt = 0;
+  var select = document.getElementById('lang');
+
+  function dict(target) {
+    if (maps[target]) return maps[target];
+    var map = Object.create(null);
+    try {
+      var saved = JSON.parse(localStorage.getItem(CACHE_PREFIX + target) || 'null');
+      if (saved && saved.v === CACHE_VERSION && saved.map) {
+        Object.keys(saved.map).forEach(function (key) { map[key] = saved.map[key]; });
+      }
+    } catch (e) { /* private mode or old cache: start clean */ }
+    maps[target] = map;
+    return map;
+  }
+
+  function saveDict(target, additions) {
+    var map = dict(target);
+    var keys = Object.keys(additions);
+    if (!keys.length) return;
+    keys.forEach(function (key) { map[key] = additions[key]; });
+    var all = Object.keys(map);
+    if (all.length > MAX_ENTRIES) {
+      all.slice(0, all.length - MAX_ENTRIES).forEach(function (key) { delete map[key]; });
+    }
+    try {
+      localStorage.setItem(CACHE_PREFIX + target, JSON.stringify({ v: CACHE_VERSION, map: map }));
+    } catch (e) { /* quota or private mode: translate again next time */ }
+  }
+
+  /* Text worth translating: no code samples, no widget chrome, no whitespace,
+     and nothing that carries no letters at all (counts, times, separators). */
   function collect() {
     var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
       acceptNode: function (node) {
@@ -108,17 +152,25 @@
     while (walker.nextNode()) {
       var node = walker.currentNode;
       var raw = node.nodeValue;
-      var core = raw.trim();
-      var at = raw.indexOf(core);
-      // Inline siblings are separated by their own whitespace, so keep the exact
-      // runs around each core and re-attach them after translating.
-      items.push({
-        node: node,
-        text: core,
-        lead: raw.slice(0, at),
-        tail: raw.slice(at + core.length),
-        index: items.length
-      });
+      var record = texts.get(node);
+      var core;
+      var lead;
+      var tail;
+
+      if (record && raw === record.lead + record.dst + record.tail) {
+        // Already ours: reuse the English source for the next language.
+        core = record.src;
+        lead = record.lead;
+        tail = record.tail;
+      } else {
+        core = raw.trim();
+        if (!/\p{L}/u.test(core)) continue;
+        var at = raw.indexOf(core);
+        lead = raw.slice(0, at);
+        tail = raw.slice(at + core.length);
+        if (record) texts.delete(node);
+      }
+      items.push({ node: node, text: core, lead: lead, tail: tail });
     }
     return items;
   }
@@ -129,19 +181,17 @@
     var batches = [];
     var batch = [];
     var size = 0;
-    var start = 0;
-    texts.forEach(function (text, i) {
+    texts.forEach(function (text) {
       var length = encodeURIComponent(text).length + 3; // "&q=" plus the value
       if (batch.length && size + length > MAX_QUERY) {
-        batches.push({ start: start, texts: batch });
+        batches.push(batch);
         batch = [];
-        start = i;
         size = 0;
       }
       batch.push(text);
       size += length;
     });
-    if (batch.length) batches.push({ start: start, texts: batch });
+    if (batch.length) batches.push(batch);
     return batches;
   }
 
@@ -181,44 +231,36 @@
     }).catch(function () { return ''; });
   }
 
-  var snapshot = null;
-  var run = 0;
-  var active = SOURCE;
-  var select = document.getElementById('lang');
+  function write(node, lead, value, tail) {
+    var next = lead + value + tail;
+    if (node.nodeValue !== next) node.nodeValue = next;
+  }
 
-  function applyAll(items) {
+  /* Pause the observer for the microtask it takes to settle these writes. */
+  function settle() {
+    applying = true;
+    setTimeout(function () { applying = false; }, 0);
+  }
+
+  function applySource(items) {
+    if (!items.length) return;
     items.forEach(function (item) {
-      if (item.text) item.node.nodeValue = item.lead + item.text + item.tail;
+      write(item.node, item.lead, item.text, item.tail);
+      texts.delete(item.node);
     });
+    settle();
   }
 
-  function restore() {
-    applyAll(snapshot);
-  }
-
-  function readCache(target) {
-    try {
-      var saved = JSON.parse(localStorage.getItem(CACHE_PREFIX + target) || 'null');
-      if (!saved || saved.v !== CACHE_VERSION || !saved.src || saved.src.length !== snapshot.length) return null;
-      for (var i = 0; i < snapshot.length; i++) {
-        if (saved.src[i] !== snapshot[i].text.trim()) return null;
-      }
-      return snapshot.map(function (item, i) {
-        return { node: item.node, text: saved.dst[i] || item.text, lead: item.lead, tail: item.tail };
-      });
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function writeCache(target, items) {
-    try {
-      localStorage.setItem(CACHE_PREFIX + target, JSON.stringify({
-        v: CACHE_VERSION,
-        src: snapshot.map(function (item) { return item.text.trim(); }),
-        dst: items.map(function (item) { return item.text; })
-      }));
-    } catch (e) { /* quota or private mode: just translate again next time */ }
+  function applyTarget(items, map) {
+    var changed = false;
+    items.forEach(function (item) {
+      var dst = map[item.text];
+      if (!dst) return;
+      write(item.node, item.lead, dst, item.tail);
+      texts.set(item.node, { src: item.text, dst: dst, lead: item.lead, tail: item.tail });
+      changed = true;
+    });
+    if (changed) settle();
   }
 
   function reveal() {
@@ -227,43 +269,47 @@
 
   function translate(target) {
     var current = ++run;
-    if (!snapshot) snapshot = collect();
-    document.documentElement.lang = target;
     active = target;
+    document.documentElement.lang = target;
+
+    var items = collect();
+    if (!items.length) {
+      reveal();
+      return Promise.resolve();
+    }
 
     if (target === SOURCE) {
-      restore();
+      applySource(items);
       reveal();
       return Promise.resolve();
     }
 
-    var cached = readCache(target);
-    if (cached) {
-      applyAll(cached);
-      reveal();
-      return Promise.resolve();
-    }
-
-    /* Repeated labels are sent once and mapped onto every node that uses them. */
-    var texts = [];
-    var slots = new Array(snapshot.length);
+    var map = dict(target);
+    var missing = [];
     var seen = Object.create(null);
-    snapshot.forEach(function (item, i) {
-      var key = item.text;
-      if (!(key in seen)) {
-        seen[key] = texts.length;
-        texts.push(key);
+    items.forEach(function (item) {
+      if (!map[item.text] && !seen[item.text]) {
+        seen[item.text] = true;
+        missing.push(item.text);
       }
-      slots[i] = seen[key];
     });
 
-    var results = new Array(texts.length);
-    return chunk(texts).reduce(function (chain, batch) {
+    // Cached strings land immediately; only the rest waits for the network.
+    applyTarget(items, map);
+    if (!missing.length) {
+      reveal();
+      return Promise.resolve();
+    }
+
+    var added = Object.create(null);
+    return chunk(missing).reduce(function (chain, batch) {
       return chain.then(function () {
         if (current !== run) return;
-        return request(batch.texts, target).then(function (translated) {
+        return request(batch, target).then(function (translated) {
           translated.forEach(function (text, i) {
-            if (text) results[batch.start + i] = text;
+            if (!text) return;
+            added[batch[i]] = text;
+            map[batch[i]] = text;
           });
         }).catch(function () {
           /* a failed batch keeps its English text rather than blanking out */
@@ -271,16 +317,30 @@
       });
     }, Promise.resolve()).then(function () {
       if (current !== run) return;
-      var out = snapshot.map(function (item, i) {
-        return { node: item.node, text: results[slots[i]] || item.text, lead: item.lead, tail: item.tail };
-      });
-      applyAll(out);
-      writeCache(target, out);
+      saveDict(target, added);
+      applyTarget(items, map);
       reveal();
     });
   }
 
-  if (!select) return;
+  /* Text the page renders after load (live tables, status lines) is picked up
+     here, translated in one batch, and remembered for the next render. */
+  function schedule() {
+    if (applying || active === SOURCE) return;
+    clearTimeout(timer);
+    timer = setTimeout(function () { translate(active); }, LIVE_DELAY);
+  }
+
+  if (window.MutationObserver) {
+    new MutationObserver(function (records) {
+      if (applying || active === SOURCE) return;
+      for (var i = 0; i < records.length; i++) {
+        var node = records[i].target;
+        var element = node.nodeType === 1 ? node : node.parentElement;
+        if (element && !element.closest(SKIP)) { schedule(); return; }
+      }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  }
 
   select.addEventListener('change', function () {
     var code = canonical(select.value) || SOURCE;
@@ -311,8 +371,6 @@
       localStorage.setItem(LANG_CACHE, JSON.stringify({ at: Date.now(), list: list }));
     } catch (e) { /* quota or private mode: just fetch it next time */ }
   }
-
-  var renderedAt = 0;
 
   function renderOptions(list) {
     index(list);

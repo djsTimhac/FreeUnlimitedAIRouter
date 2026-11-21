@@ -229,11 +229,11 @@
   </div>
 
   <section class="grid stats" id="stats">
-    <div class="card stat"><div class="k">Requests</div><div class="v" id="sRequests">–</div><div class="s" id="sRequestsSub">&nbsp;</div></div>
-    <div class="card stat"><div class="k">Success rate</div><div class="v" id="sRate">–</div><div class="s" id="sRateSub">&nbsp;</div></div>
-    <div class="card stat"><div class="k">Avg latency</div><div class="v" id="sLatency">–</div><div class="s">last successful</div></div>
-    <div class="card stat"><div class="k">Fallbacks</div><div class="v" id="sFallback">–</div><div class="s">provider switches</div></div>
-    <div class="card stat"><div class="k">Tokens</div><div class="v" id="sTokens">–</div><div class="s" id="sTokensSub">&nbsp;</div></div>
+    <div class="card stat"><div class="k">Requests</div><div class="v" id="sRequests" data-no-translate>–</div><div class="s" id="sRequestsSub">&nbsp;</div></div>
+    <div class="card stat"><div class="k">Success rate</div><div class="v" id="sRate" data-no-translate>–</div><div class="s" id="sRateSub">&nbsp;</div></div>
+    <div class="card stat"><div class="k">Avg latency</div><div class="v" id="sLatency" data-no-translate>–</div><div class="s">last successful</div></div>
+    <div class="card stat"><div class="k">Fallbacks</div><div class="v" id="sFallback" data-no-translate>–</div><div class="s">provider switches</div></div>
+    <div class="card stat"><div class="k">Tokens</div><div class="v" id="sTokens" data-no-translate>–</div><div class="s" id="sTokensSub">&nbsp;</div></div>
   </section>
 
   <section class="grid cols" style="margin-bottom:16px">
@@ -247,13 +247,13 @@
               <th class="num">Avg</th><th>Last error</th>
             </tr>
           </thead>
-          <tbody id="providers" data-no-translate><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+          <tbody id="providers"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
     <div class="card">
       <h2>Aliases</h2>
-      <div class="aliases" id="aliasList" data-no-translate></div>
+      <div class="aliases" id="aliasList"></div>
       <p class="muted" style="font-size:12.5px;margin:14px 0 0">
         Send any alias or <code>provider/model</code> as <code>model</code>.
       </p>
@@ -298,7 +298,7 @@
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const state = { status: null, key: localStorage.getItem('router_key') || '', game: null };
+  const state = { status: null, key: localStorage.getItem('router_key') || '', game: null, serialized: '' };
 
   const esc = (value) => String(value ?? '');
 
@@ -349,6 +349,7 @@
       name.className = 'name';
       const label = document.createElement('span');
       label.textContent = p.label;
+      label.dataset.noTranslate = ''; // provider and model names stay as they are
       name.appendChild(label);
       const tag = document.createElement('span');
       tag.className = 'tag ' + (p.free ? 'free' : 'paid');
@@ -361,8 +362,14 @@
       sub.style.fontSize = '11.5px';
       sub.style.fontFamily = 'var(--mono)';
       sub.textContent = p.configured
-        ? p.models.length + ' model' + (p.models.length === 1 ? '' : 's') + (p.style === 'anthropic' ? ' · anthropic' : '')
+        ? p.models.length + ' model' + (p.models.length === 1 ? '' : 's')
         : (p.requiresKey ? 'no API key' : 'not configured');
+      if (p.configured && p.style === 'anthropic') {
+        const style = document.createElement('span');
+        style.dataset.noTranslate = '';
+        style.textContent = ' · anthropic';
+        sub.appendChild(style);
+      }
       tdName.appendChild(sub);
       tr.appendChild(tdName);
 
@@ -386,6 +393,7 @@
       tdErr.textContent = fmtNum(stats.failed);
       if (stats.failed) tdErr.style.color = 'var(--bad)';
       const tdAvg = document.createElement('td'); tdAvg.className = 'num'; tdAvg.textContent = stats.avgMs ? fmtMs(stats.avgMs) : '–';
+      tdReq.dataset.noTranslate = tdErr.dataset.noTranslate = tdAvg.dataset.noTranslate = '';
 
       const tdLast = document.createElement('td');
       const lastErr = p.keys.keys.find((k) => k.lastError)?.lastError || stats.lastError;
@@ -420,11 +428,12 @@
       const chip = document.createElement('button');
       chip.className = 'alias' + (info.available ? '' : ' empty');
       chip.type = 'button';
-      chip.title = info.available
+      chip.title = name + '\n' + (info.available
         ? info.candidates.slice(0, 12).join('\n')
-        : 'No configured provider serves this alias';
+        : 'No configured provider serves this alias');
       const b = document.createElement('b'); b.textContent = name;
       const s = document.createElement('span'); s.textContent = info.available + '/' + info.candidates.length;
+      s.dataset.noTranslate = '';
       chip.append(b, s);
       chip.addEventListener('click', () => { select.value = name; $('prompt').focus(); });
       list.appendChild(chip);
@@ -510,12 +519,18 @@
   async function load() {
     try {
       const data = await api('/api/status');
+      const serialized = JSON.stringify(data);
+      // Polling every 5s: only redraw what actually changed, so translated
+      // labels are not rebuilt for nothing.
+      if (serialized === state.serialized) return;
+      state.serialized = serialized;
       state.status = data;
       renderHealth(data);
       renderProviders(data.providers);
       renderAliases(data.aliases);
       renderStats(data.stats);
     } catch (error) {
+      state.serialized = '';
       $('dot').className = 'dot bad';
       $('healthText').textContent = error.message.includes('401') ? 'API key required' : 'router unreachable';
       $('authbar').classList.add('show');
@@ -533,9 +548,15 @@
     out.textContent = '';
     const meta = document.createElement('span');
     meta.className = 'meta';
-    meta.textContent = model + ' · waiting…';
+    const metaId = document.createElement('span');
+    metaId.dataset.noTranslate = ''; // provider/model id must stay exact
+    metaId.textContent = model;
+    const metaRest = document.createElement('span');
+    metaRest.textContent = ' · waiting…';
+    meta.append(metaId, metaRest);
     out.appendChild(meta);
     const text = document.createElement('span');
+    text.dataset.noTranslate = ''; // model output is never translated
     out.appendChild(text);
 
     const started = performance.now();
@@ -557,14 +578,16 @@
 
       if (!$('stream').checked) {
         const data = await response.json();
-        meta.textContent = (data.router?.provider || '?') + '/' + (data.router?.model || '?') +
-          ' · ' + Math.round(performance.now() - started) + ' ms · ' + (data.router?.attempts || 1) + ' attempt(s)';
+        metaId.textContent = (data.router?.provider || '?') + '/' + (data.router?.model || '?');
+        metaRest.textContent = ' · ' + Math.round(performance.now() - started) + ' ms · ' +
+          (data.router?.attempts || 1) + ' attempt(s)';
         text.textContent = data.choices?.[0]?.message?.content || '(empty response)';
         return;
       }
 
-      meta.textContent = (response.headers.get('x-router-provider') || '?') + '/' +
-        (response.headers.get('x-router-model') || '?') + ' · streaming';
+      metaId.textContent = (response.headers.get('x-router-provider') || '?') + '/' +
+        (response.headers.get('x-router-model') || '?');
+      metaRest.textContent = ' · streaming';
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -592,11 +615,13 @@
           } catch {}
         }
       }
-      meta.textContent = (response.headers.get('x-router-provider') || '?') + '/' +
-        (response.headers.get('x-router-model') || '?') + ' · ' + Math.round(performance.now() - started) + ' ms · ' +
+      metaId.textContent = (response.headers.get('x-router-provider') || '?') + '/' +
+        (response.headers.get('x-router-model') || '?');
+      metaRest.textContent = ' · ' + Math.round(performance.now() - started) + ' ms · ' +
         (response.headers.get('x-router-attempts') || '1') + ' attempt(s)';
     } catch (error) {
-      meta.textContent = 'error';
+      metaId.textContent = '';
+      metaRest.textContent = 'error';
       text.textContent = error.message;
       text.style.color = 'var(--bad)';
     } finally {
