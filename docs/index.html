@@ -786,8 +786,8 @@
 
   /* ── reveal ──────────────────────────────────────────────────────────── */
   /* First visit in another language: the head script holds the English copy
-     back until translate.js has swapped it, then this reveals the page. */
-  body { transition: opacity .25s var(--ease); }
+     back until translate.js has swapped it. Deliberately no transition - a
+     background tab can stall one and leave the page invisible. */
   html[data-i18n="pending"] body { opacity: 0; }
 
   .reveal { opacity: 0; transform: translateY(18px); transition: opacity .8s var(--ease), transform .8s var(--ease); }
@@ -834,7 +834,7 @@
   }
 })();
 </script>
-<script src="translate.js?v=3" defer></script>
+<script src="translate.js?v=4" defer></script>
 </head>
 <body>
 
