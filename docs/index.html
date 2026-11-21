@@ -820,9 +820,10 @@
 /*
   First visit: land in the visitor's browser language.
 
-  This runs in <head>, before the Google Translate widget loads, so it only has
-  to write the googtrans cookie — the widget picks it up on init and translates
-  without a reload or a flash of English.
+  This runs in <head>, before anything is painted: it picks the language and
+  writes the googtrans cookie the widget reads. A cookie written on the same
+  load the widget boots in is ignored, so the very first visit is swapped once
+  (still before first paint) and every later visit renders translated directly.
 
   A manual choice always wins: Google writes the cookie itself when somebody
   uses the picker, and the DECIDED flag keeps the detector from ever running
@@ -875,14 +876,33 @@
     return parts.length ? parts[parts.length - 1] : '';
   }
 
+  /* Google's widget only applies a googtrans cookie that already existed when
+     it booted, so a freshly written one needs one reload. This runs during
+     parsing, before anything is painted, and the session flag plus the cookie
+     check keep it from ever firing twice. */
+  function reloadOnce() {
+    try {
+      if (document.cookie.indexOf('googtrans=/en/') === -1) return; // cookie blocked
+      if (sessionStorage.getItem('fu-lang-reload') === '1') return;
+      sessionStorage.setItem('fu-lang-reload', '1');
+      location.replace(location.pathname + location.search);
+    } catch (e) { /* ignore */ }
+  }
+
   try {
     var explicit = new URLSearchParams(location.search).get('lang');
     if (explicit) {
       var requested = canonical(normalize(explicit));
       if (requested) {
         localStorage.setItem(DECIDED, '1');
-        if (requested.toLowerCase() === 'en') clearCookie();
-        else writeCookie(requested);
+        if (requested.toLowerCase() === 'en') {
+          clearCookie();
+          return;
+        }
+        if (cookieLanguage().toLowerCase() !== requested.toLowerCase()) {
+          writeCookie(requested);
+          reloadOnce();
+        }
         return;
       }
     }
@@ -894,7 +914,10 @@
     var preferred = (navigator.languages && navigator.languages[0]) || navigator.language || 'en';
     var target = canonical(normalize(preferred));
     localStorage.setItem(DECIDED, '1');
-    if (target && target.toLowerCase() !== 'en') writeCookie(target);
+    if (target && target.toLowerCase() !== 'en') {
+      writeCookie(target);
+      reloadOnce();
+    }
   } catch (e) {
     /* storage or cookies can be blocked; the page simply stays in English */
   }
