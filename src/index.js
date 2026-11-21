@@ -149,7 +149,8 @@ const STATIC_FILES = new Map([
   ['/', { file: 'index.html', type: 'text/html; charset=utf-8' }],
   ['/dashboard', { file: 'index.html', type: 'text/html; charset=utf-8' }],
   ['/favicon.svg', { file: 'favicon.svg', type: 'image/svg+xml' }],
-  ['/favicon.ico', { file: 'favicon.svg', type: 'image/svg+xml' }]
+  ['/favicon.ico', { file: 'favicon.svg', type: 'image/svg+xml' }],
+  ['/translate.js', { file: 'translate.js', type: 'text/javascript; charset=utf-8' }]
 ]);
 
 /** @param {import('node:http').ServerResponse} res @param {string} path */

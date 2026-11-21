@@ -54,6 +54,24 @@
   .brand p { margin: 0; font-size: 12.5px; color: var(--muted); }
   .spacer { flex: 1; }
 
+  /* language switcher */
+  .lang {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 9px 5px 10px; border-radius: 9px;
+    background: var(--panel); border: 1px solid var(--border);
+  }
+  .lang:hover { border-color: #2f3a4d; }
+  .lang svg { width: 14px; height: 14px; color: var(--muted); flex: 0 0 auto; }
+  .lang select {
+    appearance: none; -webkit-appearance: none; border: 0; outline: none;
+    background-color: transparent; color: var(--muted); font: inherit; font-size: 12.5px;
+    cursor: pointer; padding: 2px 16px 2px 0; max-width: 150px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6' fill='none' stroke='%238b98ab' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right center; background-size: 9px auto;
+  }
+  .lang select:hover, .lang select:focus { color: var(--text); }
+  .lang option { background: #0b0e14; color: var(--text); }
+
   .pill {
     display: inline-flex; align-items: center; gap: 7px;
     font-size: 12.5px; padding: 6px 12px; border-radius: 999px;
@@ -147,6 +165,20 @@
   }
   .scroll { overflow-x: auto; }
 </style>
+<script data-lang-detect>
+/* First visit: remember the browser language. translate.js does the rest. */
+(function () {
+  try {
+    var stored = localStorage.getItem('fu-lang');
+    var tag = String((navigator.languages && navigator.languages[0]) || navigator.language || 'en').toLowerCase();
+    var detected = tag.indexOf('zh') === 0
+      ? (/hant|tw|hk|mo/.test(tag) ? 'zh-TW' : 'zh-CN')
+      : tag.split('-')[0];
+    if (!stored) localStorage.setItem('fu-lang', detected || 'en');
+  } catch (e) { /* storage blocked: translate.js detects again */ }
+})();
+</script>
+<script src="/translate.js" defer></script>
 </head>
 <body>
 <div class="wrap">
@@ -168,6 +200,11 @@
       <p>One OpenAI-compatible endpoint · automatic fallback · key rotation</p>
     </div>
     <div class="spacer"></div>
+    <div class="lang" title="Translate this page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.7 4 6 4 9s-1.4 6.3-4 9c-2.6-2.7-4-6-4-9s1.4-6.3 4-9Z"/></svg>
+      <select id="lang" aria-label="Translate this page"></select>
+    </div>
+
     <span class="pill" id="health"><i class="dot" id="dot"></i><span id="healthText">connecting…</span></span>
     <button id="reload" title="Refresh now">Refresh</button>
   </header>
@@ -196,13 +233,13 @@
               <th class="num">Avg</th><th>Last error</th>
             </tr>
           </thead>
-          <tbody id="providers"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+          <tbody id="providers" data-no-translate><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
     <div class="card">
       <h2>Aliases</h2>
-      <div class="aliases" id="aliasList"></div>
+      <div class="aliases" id="aliasList" data-no-translate></div>
       <p class="muted" style="font-size:12.5px;margin:14px 0 0">
         Send any alias or <code>provider/model</code> as <code>model</code>.
       </p>
@@ -231,7 +268,7 @@
         <thead>
           <tr><th>Time</th><th>Requested</th><th>Served by</th><th class="num">Status</th><th class="num">ms</th><th class="num">Tokens</th></tr>
         </thead>
-        <tbody id="recent"><tr><td colspan="6" class="muted">Nothing yet.</td></tr></tbody>
+        <tbody id="recent" data-no-translate><tr><td colspan="6" class="muted">Nothing yet.</td></tr></tbody>
       </table>
     </div>
   </section>
