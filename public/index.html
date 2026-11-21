@@ -382,6 +382,7 @@
         bar.className = 'keybar ' + (!k.present ? '' : k.cooling ? 'cool' : 'ok');
         bar.title = k.label + (k.cooling ? ' · cooling ' + Math.ceil(k.cooldownMs / 1000) + 's' : ' · ready') +
                     (k.lastError ? '\n' + k.lastError : '');
+        bar.dataset.noTitle = ''; // key labels are machine data
         keys.appendChild(bar);
       }
       tdKeys.appendChild(keys);
@@ -431,6 +432,7 @@
       chip.title = name + '\n' + (info.available
         ? info.candidates.slice(0, 12).join('\n')
         : 'No configured provider serves this alias');
+      chip.dataset.noTitle = ''; // alias and model ids must stay exact
       const b = document.createElement('b'); b.textContent = name;
       const s = document.createElement('span'); s.textContent = info.available + '/' + info.candidates.length;
       s.dataset.noTranslate = '';

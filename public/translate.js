@@ -25,7 +25,7 @@
   var CACHE_VERSION = 4; // 4 stores a string map instead of a page snapshot
   var MAX_ENTRIES = 900;
   var LIVE_DELAY = 300;
-  var SKIP = 'script,style,noscript,code,pre,textarea,input,select,option,[data-no-translate]';
+  var SKIP = 'script,style,noscript,code,pre,kbd,textarea,input,select,option,[data-no-translate]';
 
   // Autonyms for the languages people pick most; the full set of what Google
   // supports is fetched at runtime, so this is a head start, not the limit.
@@ -101,6 +101,8 @@
      the exact whitespace around it. Source is always English, whatever the
      node currently says, so a second language switch starts from the source. */
   var texts = new WeakMap();
+  var titles = new WeakMap(); // element -> {src, dst} for title attributes
+  var pageTitle = document.title;
   var maps = Object.create(null); // language -> {english: translated}
   var active = SOURCE;
   var run = 0;
@@ -177,6 +179,26 @@
     return items;
   }
 
+  /* Tooltips carry copy too. The title a node currently shows may already be
+     a translation, so the English source comes from the record when it is.
+     Elements whose tooltip is machine data opt out with data-no-title. */
+  function collectTitles(root) {
+    var scope = root && root.nodeType === 1 ? root : document.body;
+    var list = scope.querySelectorAll('[title]');
+    var items = [];
+    for (var i = 0; i < list.length; i++) {
+      var el = list[i];
+      if (el.closest(SKIP) || el.hasAttribute('data-no-title')) continue;
+      var raw = el.getAttribute('title');
+      if (!raw || raw.trim().length < 2) continue;
+      var record = titles.get(el);
+      var value = record && raw === record.dst ? record.src : raw.trim();
+      if (!/\p{L}/u.test(value)) continue;
+      items.push({ el: el, text: value });
+    }
+    return items;
+  }
+
   /* Pack as much text as the URL allows into one request: every batch is a
      full round trip, so the whole page usually leaves in a single call. */
   function chunk(texts) {
@@ -247,6 +269,15 @@
   function applySource(items) {
     if (!items.length) return;
     items.forEach(function (item) {
+      if (item.doc) {
+        document.title = item.text;
+        return;
+      }
+      if (item.el) {
+        item.el.title = item.text;
+        titles.delete(item.el);
+        return;
+      }
       write(item.node, item.lead, item.text, item.tail);
       texts.delete(item.node);
     });
@@ -258,8 +289,15 @@
     items.forEach(function (item) {
       var dst = map[item.text];
       if (!dst) return;
-      write(item.node, item.lead, dst, item.tail);
-      texts.set(item.node, { src: item.text, dst: dst, lead: item.lead, tail: item.tail });
+      if (item.doc) {
+        if (document.title !== dst) document.title = dst;
+      } else if (item.el) {
+        if (item.el.title !== dst) item.el.title = dst;
+        titles.set(item.el, { src: item.text, dst: dst });
+      } else {
+        write(item.node, item.lead, dst, item.tail);
+        texts.set(item.node, { src: item.text, dst: dst, lead: item.lead, tail: item.tail });
+      }
       changed = true;
     });
     if (changed) settle();
@@ -275,7 +313,8 @@
     active = target;
     document.documentElement.lang = target;
 
-    var items = collect();
+    var items = collect().concat(collectTitles());
+    if (pageTitle) items.push({ doc: true, text: pageTitle });
     if (!items.length) {
       busy = false;
       reveal();
@@ -351,7 +390,7 @@
      flashes English. Only unknown strings wait for the next request. */
   function applyKnown(root) {
     if (active === SOURCE || !root) return;
-    var items = collect(root);
+    var items = collect(root).concat(collectTitles(root));
     if (!items.length) return;
     var map = dict(active);
     applyTarget(items, map);
@@ -366,11 +405,18 @@
     new MutationObserver(function (records) {
       if (applying || active === SOURCE) return;
       for (var i = 0; i < records.length; i++) {
-        var node = records[i].target;
+        var record = records[i];
+        var node = record.target;
         var element = node.nodeType === 1 ? node : node.parentElement;
-        if (element && !element.closest(SKIP)) { schedule(); return; }
+        if (!element || element.closest(SKIP)) continue;
+        if (record.type === 'attributes' && element.hasAttribute('data-no-title')) continue;
+        schedule();
+        return;
       }
-    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+    }).observe(document.body, {
+      childList: true, subtree: true, characterData: true,
+      attributes: true, attributeFilter: ['title']
+    });
   }
 
   select.addEventListener('change', function () {
