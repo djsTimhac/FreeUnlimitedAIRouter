@@ -17,6 +17,7 @@
   var CACHE_PREFIX = 'fu-cache:';
   var ENDPOINT = 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t';
   var MAX_PAYLOAD = 1800;
+  var CACHE_VERSION = 2; // bump when the applied text changes shape
   var SKIP = 'script,style,noscript,code,pre,textarea,select,option,[data-no-translate]';
 
   // Native names, so the picker reads the same to everybody.
@@ -140,7 +141,7 @@
   function readCache(target) {
     try {
       var saved = JSON.parse(localStorage.getItem(CACHE_PREFIX + target) || 'null');
-      if (!saved || !saved.src || saved.src.length !== snapshot.length) return null;
+      if (!saved || saved.v !== CACHE_VERSION || !saved.src || saved.src.length !== snapshot.length) return null;
       for (var i = 0; i < snapshot.length; i++) {
         if (saved.src[i] !== snapshot[i].text.trim()) return null;
       }
@@ -155,6 +156,7 @@
   function writeCache(target, items) {
     try {
       localStorage.setItem(CACHE_PREFIX + target, JSON.stringify({
+        v: CACHE_VERSION,
         src: snapshot.map(function (item) { return item.text.trim(); }),
         dst: items.map(function (item) { return item.text; })
       }));
