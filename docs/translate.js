@@ -15,9 +15,9 @@
   var SOURCE = 'en';
   var STORE = 'fu-lang';
   var CACHE_PREFIX = 'fu-cache:';
-  var ENDPOINT = 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t';
+  var ENDPOINT = 'https://translate.googleapis.com/translate_a/t?client=gtx';
   var MAX_PAYLOAD = 1800;
-  var CACHE_VERSION = 2; // bump when the applied text changes shape
+  var CACHE_VERSION = 3; // bump when the applied text changes shape
   var SKIP = 'script,style,noscript,code,pre,textarea,select,option,[data-no-translate]';
 
   // Autonyms for the languages people pick most; the full set of what Google
@@ -139,26 +139,40 @@
     return batches;
   }
 
-  /* One request carries many segments, each tagged with [[n]] so the reply can
-     be mapped back. Markers survive translation, which plain newlines do not. */
+  /* One request carries many segments: this endpoint answers with exactly one
+     entry per q, in order. An earlier version embedded [[n]] markers in a
+     single payload, but Google drops a bracket in some languages, the marker
+     goes missing and those lines silently stay English. */
   function request(batch, target) {
-    var payload = batch.map(function (item, i) {
-      return '[[' + i + ']] ' + item.text.replace(/\s+/g, ' ');
-    }).join('\n');
     var url = ENDPOINT + '&sl=' + SOURCE + '&tl=' + encodeURIComponent(target) +
-      '&q=' + encodeURIComponent(payload);
+      batch.map(function (item) { return '&q=' + encodeURIComponent(item.text.replace(/\s+/g, ' ')); }).join('');
 
     return fetch(url).then(function (res) {
       if (!res.ok) throw new Error('translate HTTP ' + res.status);
       return res.json();
     }).then(function (data) {
-      var merged = (data[0] || []).map(function (part) { return part[0]; }).join('');
-      var found = {};
-      var marker = /\[\[(\d+)\]\]\s?([\s\S]*?)(?=\[\[\d+\]\]|$)/g;
-      var match;
-      while ((match = marker.exec(merged))) found[Number(match[1])] = match[2].trim();
-      return batch.map(function (item, i) { return found[i] || ''; });
+      var list = Array.isArray(data) ? data : [data];
+      if (list.length !== batch.length) {
+        // Rather than shift translations onto the wrong nodes, ask one by one.
+        return Promise.all(batch.map(function (item) { return requestOne(item.text, target); }));
+      }
+      return list.map(function (entry) {
+        if (typeof entry === 'string') return entry;
+        if (entry && typeof entry === 'object' && typeof entry.t === 'string') return entry.t;
+        return '';
+      });
     });
+  }
+
+  function requestOne(text, target) {
+    var url = ENDPOINT + '&sl=' + SOURCE + '&tl=' + encodeURIComponent(target) +
+      '&q=' + encodeURIComponent(text.replace(/\s+/g, ' '));
+    return fetch(url).then(function (res) {
+      return res.ok ? res.json() : null;
+    }).then(function (data) {
+      var list = Array.isArray(data) ? data : [data];
+      return typeof list[0] === 'string' ? list[0] : '';
+    }).catch(function () { return ''; });
   }
 
   var snapshot = null;
