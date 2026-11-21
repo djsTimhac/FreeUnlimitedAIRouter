@@ -1229,65 +1229,55 @@
   const select = document.getElementById('lang');
   if (!select) return;
 
+  // Older builds translated through the googtrans cookie; clear any leftover so
+  // the page is never translated on top of a stale language.
+  document.cookie = 'googtrans=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  try {
+    document.cookie = 'googtrans=; path=/; domain=' + location.hostname + '; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  } catch (e) { /* host-only cookie is enough */ }
+
   const has = (code) => LANGS.some(([c]) => c.toLowerCase() === String(code).toLowerCase());
   const canonical = (code) => {
     const hit = LANGS.find(([c]) => c.toLowerCase() === String(code).toLowerCase());
     return hit ? hit[0] : null;
   };
 
-  function cookieValue() {
-    const entry = document.cookie.split('; ').find((part) => part.startsWith('googtrans='));
-    if (!entry) return '';
-    const parts = decodeURIComponent(entry.slice('googtrans='.length)).split('/').filter(Boolean);
-    return parts.length ? parts[parts.length - 1] : '';
-  }
+  const current = () => localStorage.getItem(KEY) || 'en';
 
-  function setCookie(code) {
-    const expired = code === 'en';
-    const value = expired ? '' : '/en/' + code;
-    const expires = expired
-      ? 'Thu, 01 Jan 1970 00:00:00 GMT'
-      : new Date(Date.now() + 365 * 24 * 3600 * 1000).toUTCString();
-    document.cookie = 'googtrans=' + value + '; path=/; expires=' + expires;
-    try {
-      document.cookie = 'googtrans=' + value + '; path=/; domain=' + location.hostname + '; expires=' + expires;
-    } catch (e) { /* host-only cookie is enough */ }
+  /* Google Translate keeps the original DOM and re-translates from it, so driving
+     its own <select class="goog-te-combo"> is instant and never double-translates
+     (which a googtrans cookie plus reload does). */
+  function apply(code, attempt = 0) {
+    const combo = document.querySelector('.goog-te-combo');
+    if (!combo) {
+      if (attempt < 50) setTimeout(() => apply(code, attempt + 1), 200);
+      return;
+    }
+    const target = code === 'en' ? '' : code;
+    if (combo.value === target) return;
+    combo.value = target;
+    combo.dispatchEvent(new Event('change', { bubbles: true }));
   }
-
-  const current = () => canonical(cookieValue()) || localStorage.getItem(KEY) || 'en';
 
   function go(code) {
     localStorage.setItem(KEY, code);
-    setCookie(code);
-    location.reload();
+    apply(code);
   }
 
   // First visit: follow the browser language instead of making people hunt for it.
-  if (sessionStorage.getItem('fu-lang-booted') !== '1' && !localStorage.getItem(KEY)) {
-    sessionStorage.setItem('fu-lang-booted', '1');
+  if (!localStorage.getItem(KEY)) {
     let detected = (navigator.language || 'en').toLowerCase();
     if (detected === 'zh' || detected.startsWith('zh-han') || detected === 'zh-cn') detected = 'zh-CN';
     else if (detected === 'zh-tw' || detected === 'zh-hk' || detected === 'zh-hant') detected = 'zh-TW';
     else if (detected === 'nb' || detected === 'nn') detected = 'no';
     else detected = detected.slice(0, 2);
 
-    const target = canonical(detected);
-    if (target && target !== 'en') {
-      go(target);
-      return;
-    }
-    localStorage.setItem(KEY, 'en');
+    localStorage.setItem(KEY, canonical(detected) || 'en');
   }
 
   // ?lang=de lets you deep-link a translated page.
   const fromUrl = new URLSearchParams(location.search).get('lang');
-  if (fromUrl && has(fromUrl)) {
-    const target = canonical(fromUrl);
-    if (target !== current()) {
-      go(target);
-      return;
-    }
-  }
+  if (fromUrl && has(fromUrl)) localStorage.setItem(KEY, canonical(fromUrl));
 
   for (const [code, name] of LANGS) {
     const option = document.createElement('option');
@@ -1296,8 +1286,10 @@
     option.lang = code;
     select.appendChild(option);
   }
-  select.value = current();
+  const initial = current();
+  select.value = initial;
   select.addEventListener('change', () => go(select.value));
+  if (initial !== 'en') apply(initial);
 })();
 </script>
 </body>
