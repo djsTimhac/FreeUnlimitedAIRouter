@@ -815,6 +815,91 @@
     .hop, .answer, .chip { opacity: 1; transform: none; }
   }
 </style>
+
+<script data-lang-detect>
+/*
+  First visit: land in the visitor's browser language.
+
+  This runs in <head>, before the Google Translate widget loads, so it only has
+  to write the googtrans cookie — the widget picks it up on init and translates
+  without a reload or a flash of English.
+
+  A manual choice always wins: Google writes the cookie itself when somebody
+  uses the picker, and the DECIDED flag keeps the detector from ever running
+  twice for the same visitor.
+*/
+(function () {
+  var DECIDED = 'fu-lang-decided';
+  var SUPPORTED = 'en de fr es it pt nl pl ru uk cs sk hu ro bg hr sr sl el tr sv no da fi et lv lt be ca gl eu cy ga is sq mk bs mt af sw am ar he fa ur hi bn pa gu mr ta te kn ml si ne th vi id ms tl zh-CN zh-TW ja ko mn kk uz az hy ka eo la mi ha yo ig zu xh so km lo my ps sd ky tg'.split(' ');
+
+  function normalize(tag) {
+    var t = String(tag || '').toLowerCase();
+    if (!t) return '';
+    if (t.indexOf('zh') === 0) return /hant|tw|hk|mo/.test(t) ? 'zh-tw' : 'zh-cn';
+    var base = t.split('-')[0];
+    if (base === 'nb' || base === 'nn') return 'no';
+    if (base === 'iw') return 'he';
+    if (base === 'in') return 'id';
+    if (base === 'fil') return 'tl';
+    return base;
+  }
+
+  function canonical(code) {
+    if (!code) return '';
+    for (var i = 0; i < SUPPORTED.length; i++) {
+      if (SUPPORTED[i].toLowerCase() === code.toLowerCase()) return SUPPORTED[i];
+    }
+    return '';
+  }
+
+  function writeCookie(code) {
+    var value = '/en/' + code;
+    var maxAge = 60 * 60 * 24 * 365;
+    document.cookie = 'googtrans=' + value + '; path=/; max-age=' + maxAge;
+    try {
+      document.cookie = 'googtrans=' + value + '; path=/; domain=' + location.hostname + '; max-age=' + maxAge;
+    } catch (e) { /* host-only cookie is enough */ }
+  }
+
+  function clearCookie() {
+    document.cookie = 'googtrans=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    try {
+      document.cookie = 'googtrans=; path=/; domain=' + location.hostname + '; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    } catch (e) { /* ignore */ }
+  }
+
+  function cookieLanguage() {
+    var match = document.cookie.match(/(?:^|; )googtrans=([^;]*)/);
+    if (!match) return '';
+    var parts = decodeURIComponent(match[1]).split('/').filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : '';
+  }
+
+  try {
+    var explicit = new URLSearchParams(location.search).get('lang');
+    if (explicit) {
+      var requested = canonical(normalize(explicit));
+      if (requested) {
+        localStorage.setItem(DECIDED, '1');
+        if (requested.toLowerCase() === 'en') clearCookie();
+        else writeCookie(requested);
+        return;
+      }
+    }
+
+    // Returning visitor with a choice already made (ours, Google's, or none).
+    if (localStorage.getItem(DECIDED) === '1') return;
+    if (cookieLanguage()) { localStorage.setItem(DECIDED, '1'); return; }
+
+    var preferred = (navigator.languages && navigator.languages[0]) || navigator.language || 'en';
+    var target = canonical(normalize(preferred));
+    localStorage.setItem(DECIDED, '1');
+    if (target && target.toLowerCase() !== 'en') writeCookie(target);
+  } catch (e) {
+    /* storage or cookies can be blocked; the page simply stays in English */
+  }
+})();
+</script>
 </head>
 <body>
 
